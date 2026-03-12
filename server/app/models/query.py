@@ -34,8 +34,9 @@ class RunStatus(enum.Enum):
 
 class QueryTemplate(db.Model):
     """
-    Library of questions Vigil asks AI platforms every 24 hours.
-    Each company has 50-100 templates covering important customer query patterns.
+    Library of reusable questions available for manual runs.
+    Frontend can ask for N prompts for a product/topic, allow user edits,
+    then execute those prompts in a user-triggered batch.
     """
     __tablename__ = "query_templates"
 
@@ -58,7 +59,7 @@ class QueryTemplate(db.Model):
     # Queries where they should be mentioned but aren't = serious gaps.
 
     is_active              = db.Column(db.Boolean, default=True)
-    # Inactive templates are skipped during daily query runs.
+    # Inactive templates are hidden from prompt suggestion and batch generation.
 
     created_at             = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -85,14 +86,17 @@ class QueryTemplate(db.Model):
 class QueryRun(db.Model):
     """
     One execution of one QueryTemplate against one AI platform.
-    Every 24 hours, each template is run against ChatGPT, Gemini,
-    Perplexity, and Claude — creating 4 QueryRun rows per template per day.
+    Runs are no longer scheduler-driven; they are created by explicit
+    user-initiated batch requests from the frontend.
     """
     __tablename__ = "query_runs"
 
     id                  = db.Column(db.Integer, primary_key=True)
     company_id          = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
     template_id         = db.Column(db.Integer, db.ForeignKey("query_templates.id"), nullable=False)
+    batch_run_id        = db.Column(db.Integer, db.ForeignKey("query_batch_runs.id"))
+    batch_item_id       = db.Column(db.Integer, db.ForeignKey("query_batch_items.id"))
+    # Links each run back to a manual history entry for "what happened last time" views.
 
     platform            = db.Column(db.Enum(LLMPlatform), nullable=False)
     status              = db.Column(db.Enum(RunStatus), default=RunStatus.PENDING)
@@ -145,10 +149,11 @@ class QueryRun(db.Model):
 
 class QueryResult(db.Model):
     """
-    Aggregated statistics computed from multiple QueryRuns for a template.
+    Aggregated statistics computed from multiple QueryRuns for a template
+    or from a specific manual batch run.
     Stored separately so dashboard charts can load fast without
     re-aggregating hundreds of QueryRun rows on every request.
-    Updated by score_updater.py after every daily query batch.
+    Updated after each manual batch completes.
     """
     __tablename__ = "query_results"
 

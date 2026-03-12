@@ -36,7 +36,7 @@ class CitationSource(db.Model):
 
     citation_count  = db.Column(db.Integer, default=0)
     # Total times AI cited this domain across all query runs
-    # Updated by score_updater.py after each daily batch
+    # Updated after each completed manual run batch
 
     positive_count  = db.Column(db.Integer, default=0)
     # Citations where the source said something favorable about the company

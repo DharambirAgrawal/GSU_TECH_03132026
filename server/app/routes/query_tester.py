@@ -1,6 +1,9 @@
 # app/routes/query_tester.py
 # -----------------------------------------
-# Blueprint for live query simulation endpoint.
+# Blueprint for low-level query simulation endpoints.
+# This module remains useful for direct ad-hoc tests, while the
+# primary frontend flow now uses /api/runs for async batch execution
+# and history tracking.
 # Registered in create_app() at URL prefix: /api/query
 #
 # IMPORTS NEEDED:
@@ -31,7 +34,12 @@
 # PURPOSE:
 #   Runs a live ad-hoc query against one or more LLM platforms
 #   and returns the responses with brand mention analysis and
-#   optional fact-checking. Used for the live Query Tester UI.
+#   optional fact-checking.
+#
+# IMPORTANT:
+#   This endpoint is synchronous and best for lightweight testing.
+#   For production workflow (user chooses N prompts, edits them,
+#   starts run without waiting, then checks history), use /api/runs.
 #
 # REQUEST BODY:
 #   {
@@ -97,7 +105,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Returns all QueryTemplates for a company so the UI can
-#   populate a dropdown of pre-loaded queries to test.
+#   generate company-aware prompt sets before creating a run draft.
 #
 # LOGIC:
 #   1. Look up Company
@@ -109,7 +117,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Add a new QueryTemplate for a company.
-#   Used when the content team wants to track a new query pattern.
+#   Used to curate the query library that powers future run suggestions.
 #
 # REQUEST BODY:
 #   {

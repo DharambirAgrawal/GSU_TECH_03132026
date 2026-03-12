@@ -6,7 +6,9 @@
 #
 # IMPORTS NEEDED (import each module, not just the classes):
 #   from . import company
+#   from . import auth
 #   from . import query
+#   from . import run_history
 #   from . import accuracy
 #   from . import crawl
 #   from . import content

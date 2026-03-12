@@ -8,7 +8,7 @@
 #   from app.models.company import Company
 #   from app.models.crawl import CrawlJob, PageAudit, SchemaIssue, CrawlStatus
 #   from app.extensions import db
-#   from app.jobs.weekly_crawl import trigger_crawl_for_company
+#   from app.services.run_orchestrator import enqueue_crawl_task_for_company
 #
 # BLUEPRINT:
 #   bp = Blueprint("crawl", __name__)
@@ -78,7 +78,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Manually trigger an immediate crawl for a company.
-#   Kicks off the same process as the weekly_crawl.py job.
+#   Kicks off an asynchronous crawl task for this company only.
 #
 # LOGIC:
 #   1. Look up Company by slug

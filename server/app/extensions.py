@@ -8,7 +8,12 @@
 # IMPORTS NEEDED:
 #   from flask_sqlalchemy import SQLAlchemy
 #   from flask_migrate import Migrate
-#   from apscheduler.schedulers.background import BackgroundScheduler
+#
+# IMPORTANT DESIGN NOTE:
+#   This backend no longer uses scheduler-driven app-wide automation.
+#   All crawl/query work is triggered manually by authenticated users
+#   from the frontend and then executed as asynchronous background tasks
+#   scoped to a single company run request.
 #
 # INSTANCES TO CREATE:
 #
@@ -20,11 +25,12 @@
 #       - Handles `flask db init`, `flask db migrate`, `flask db upgrade`
 #       - Bound to app in create_app() via migrate.init_app(app, db)
 #
-#   scheduler = BackgroundScheduler()
-#       - APScheduler instance used for background jobs (24hr queries, weekly crawls)
-#       - Jobs are registered in create_app() after blueprints are loaded
-#       - scheduler.start() is called in create_app() to begin background execution
-#
 # USAGE PATTERN (in any model file):
 #   from app.extensions import db
 #   class MyModel(db.Model): ...
+
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
+db = SQLAlchemy()
+migrate = Migrate()

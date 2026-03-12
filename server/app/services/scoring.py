@@ -1,8 +1,8 @@
 # app/services/scoring.py
 # -----------------------------------------
 # Service: Calculates and updates all visibility and accuracy scores.
-# Called by score_updater.py after every daily query batch.
-# Also updates Company cached score fields for fast dashboard loads.
+# Called by run_orchestrator when a manual run finishes.
+# Updates Company cached score fields for fast dashboard loads.
 #
 # IMPORTS NEEDED:
 #   from app.models.company import Company
@@ -18,7 +18,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Recalculates and saves all cached scores for one company.
-#   Single entry point called by score_updater.py.
+#   Single entry point called after manual run completion.
 #   Returns dict of new score values for logging.
 #
 # STEPS:

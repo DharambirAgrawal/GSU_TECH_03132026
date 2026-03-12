@@ -20,7 +20,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Main entry point for crawling a company's website.
-#   Called by weekly_crawl.py background job and the /api/crawl/trigger route.
+#   Called by manual run flow and /api/crawl/trigger route.
 #
 # STEPS:
 #   1. Load Company from db

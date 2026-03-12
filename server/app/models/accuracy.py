@@ -163,7 +163,7 @@ class FactualError(db.Model):
 
     occurrence_count     = db.Column(db.Integer, default=1)
     # How many times this exact error has been seen across all runs
-    # Incremented by score_updater.py each cycle it recurs
+    # Incremented each time the same issue recurs in later manual runs
 
     first_seen_at        = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     last_seen_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))

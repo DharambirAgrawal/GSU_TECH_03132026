@@ -1,1226 +1,296 @@
-# VIGIL — Complete Technical Documentation
-## Stack: Flask + SQLAlchemy (ORM) + SQLite + Flask-Migrate
+# VIGIL Backend — Manual Run + Company-Domain Magic Link Architecture
+
+## Stack
+- Flask API
+- SQLAlchemy ORM + Flask-Migrate
+- SQLite for development (PostgreSQL-ready)
+- Pydantic for request validation
+- LLM clients (OpenAI / Anthropic / others)
 
 ---
 
-## Table of Contents
-1. Tech Stack Decisions
-2. Folder Structure
-3. App Setup & Configuration
-4. All Data Models (with full explanation)
-5. Model Relationships Map
-6. How Each Model Connects to the Dashboard
-7. Background Jobs
-8. API Route Structure
+## 1) Product Flow (Updated)
+
+This backend is now **manual-run driven**.
+
+There are **no daily/weekly scheduler automations** that run the entire app globally.
+Everything starts only when an authenticated company user clicks from frontend.
+
+### End-to-end flow
+1. Company registers with:
+   - company name
+   - company URL
+   - about company (optional)
+2. Backend extracts and auto-approves company login domain (for now).
+   - Example: `amazon.com`
+3. Any user with `*@amazon.com` can request a magic link.
+4. User clicks magic link, receives session, and opens company dashboard.
+5. User chooses topic + number of prompts (e.g., 50), edits any prompts, then clicks Start.
+6. Backend immediately accepts request, enqueues async run, and returns success.
+7. Run executes in background and creates a history entry.
+8. All users in same company see the same dashboard + same run history.
 
 ---
 
-## 1. TECH STACK DECISIONS
+## 2) Multi-tenant Access Model
 
-| Layer | Choice | Why |
-|---|---|---|
-| Framework | Flask | Lightweight, fast to build, good for APIs |
-| ORM | Flask-SQLAlchemy | No manual SQL, Pythonic model definitions |
-| Database | SQLite | Zero config for dev/demo, swap to Postgres in prod |
-| Migrations | Flask-Migrate | Schema changes without dropping tables |
-| Scheduling | APScheduler | Background jobs for 24hr query simulation |
-| AI Queries | OpenAI + Anthropic SDK | Query simulation against LLMs |
-| Scraping | httpx + BeautifulSoup4 | Website AI-readability crawl |
-| Validation | Pydantic | Request/response validation |
+Tenant model is **company-scoped**, not user-scoped.
 
-**Why SQLAlchemy over raw SQL:**
-- Define models as Python classes — no SQL strings scattered everywhere
-- Relationships handled automatically (no manual JOINs for simple queries)
-- Migration history with Flask-Migrate — database changes are versioned
-- Works with SQLite now, PostgreSQL in production with zero code changes
+- Company is the data boundary.
+- Many users can belong to one company.
+- Access is granted by email domain allowlist.
+- Dashboard state and history are shared for all users in that company.
+
+### Example
+- Allowed domain: `ebay.com`
+- `user1@ebay.com`, `ops@ebay.com`, `leader@ebay.com`
+- All authenticate into the **same company dashboard** and view same run history.
 
 ---
 
-## 2. FOLDER STRUCTURE
+## 3) Authentication (Magic Link)
 
-```
-vigil/
-│
+### Registration
+`POST /api/auth/register-company`
+
+Input:
+- `company_name`
+- `company_url`
+- `about_company` (optional)
+- `contact_email`
+
+Backend actions:
+- Creates `Company`
+- Creates primary `CompanyDomain`
+- Creates/updates `CompanyConfig`
+- Creates initial `CompanyUser` (owner)
+
+### Request link
+`POST /api/auth/request-magic-link`
+
+Input:
+- `email`
+
+Backend actions:
+- Verifies email domain is allowed
+- Creates one-time token (`MagicLinkToken`)
+- Sends link via email provider
+
+### Verify link
+`POST /api/auth/verify-magic-link`
+
+Input:
+- `token`
+
+Backend actions:
+- Verifies token (unused, unexpired)
+- Marks token used
+- Creates `UserSession`
+- Returns session token and company context
+
+### Session profile
+`GET /api/auth/me`
+
+Returns:
+- authenticated user info
+- company info
+
+---
+
+## 4) Manual Run Lifecycle
+
+### A) Generate prompts
+`POST /api/runs/generate-prompts`
+
+Input:
+- `topic` (example: `Laptop`)
+- `query_count` (example: `50`)
+
+Backend:
+- builds company-aware prompts
+- creates draft run (`QueryBatchRun`) + items (`QueryBatchItem`)
+- returns editable prompt list
+
+### B) Edit prompts
+`PATCH /api/runs/<run_id>/queries`
+
+Input:
+- list of edited queries
+
+Backend:
+- replaces/reorders run items
+- records editor user id
+
+### C) Start run (async)
+`POST /api/runs/<run_id>/start`
+
+Backend:
+- returns immediate success (`queued`)
+- worker executes queries in background
+- updates run status/progress counters
+
+### D) Poll status
+`GET /api/runs/<run_id>/status`
+
+Returns:
+- status
+- completed/failed counts
+- progress percentage
+
+### E) View history
+`GET /api/runs/history`
+`GET /api/runs/history/<run_id>`
+
+Returns:
+- all historical runs for company
+- query-level outcomes
+- before/after snapshots for comparison
+
+---
+
+## 5) Data Models (New/Updated)
+
+## Company-related
+- `Company` (updated)
+  - added `about_company`
+  - added `approved_email_domain`
+  - added `registration_status`
+- `CompanyConfig` (updated)
+  - manual-run controls (`default_query_count`, `max_query_count`)
+
+## Auth models
+- `CompanyDomain`
+- `CompanyUser`
+- `MagicLinkToken`
+- `UserSession`
+
+## Run history models
+- `QueryBatchRun`
+- `QueryBatchItem`
+
+## Existing execution models (reused)
+- `QueryTemplate`
+- `QueryRun` (now can link to `batch_run_id` / `batch_item_id`)
+- `AccuracyCheck`
+- `FactualError`
+- `ContentFix`
+
+---
+
+## 6) Folder Structure (Updated)
+
+```text
+server/
 ├── app/
-│   ├── __init__.py              # App factory, register blueprints
-│   ├── extensions.py            # db, migrate, scheduler instances
-│   │
-│   ├── models/                  # ALL data models live here
-│   │   ├── __init__.py          # Imports all models (important for migrations)
-│   │   ├── company.py           # Company, CompanyConfig
-│   │   ├── query.py             # QueryTemplate, QueryRun, QueryResult
-│   │   ├── accuracy.py          # AccuracyCheck, FactualError
-│   │   ├── crawl.py             # CrawlJob, PageAudit, SchemaIssue
-│   │   ├── content.py           # ContentFix, PublishedFix
-│   │   ├── competitor.py        # Competitor, CompetitorRanking
-│   │   ├── source.py            # CitationSource, SourceMention
-│   │   └── ethics.py            # EthicsFlag, ComplianceAlert
-│   │
-│   ├── routes/                  # API endpoints
+│   ├── __init__.py
+│   ├── extensions.py
+│   ├── models/
 │   │   ├── __init__.py
-│   │   ├── dashboard.py         # Overview, scores, trends
-│   │   ├── visibility.py        # Mention rates, platforms, sources
-│   │   ├── accuracy.py          # Fact check results, error log
-│   │   ├── competitors.py       # Ranking, content gap analysis
-│   │   ├── actions.py           # Action center, fix queue
-│   │   ├── crawl.py             # Readability audit results
-│   │   └── query_tester.py      # Live query simulation endpoint
-│   │
-│   ├── services/                # Business logic (not routes, not models)
-│   │   ├── crawler.py           # Crawls website like GPTBot does
-│   │   ├── query_runner.py      # Sends queries to ChatGPT/Gemini/etc
-│   │   ├── fact_checker.py      # Compares AI response vs live page
-│   │   ├── content_generator.py # Generates fix content via AI
-│   │   ├── root_cause.py        # Diagnoses why error happened
-│   │   └── scoring.py           # Calculates visibility/accuracy scores
-│   │
-│   ├── jobs/                    # Background scheduled tasks
+│   │   ├── company.py
+│   │   ├── auth.py
+│   │   ├── run_history.py
+│   │   ├── query.py
+│   │   ├── accuracy.py
+│   │   ├── crawl.py
+│   │   ├── content.py
+│   │   ├── competitor.py
+│   │   ├── source.py
+│   │   └── ethics.py
+│   ├── routes/
 │   │   ├── __init__.py
-│   │   ├── daily_queries.py     # Runs all query templates every 24hrs
-│   │   ├── weekly_crawl.py      # Re-crawls all company pages weekly
-│   │   └── score_updater.py     # Recalculates all scores after jobs
-│   │
+│   │   ├── auth.py
+│   │   ├── runs.py
+│   │   ├── query_tester.py
+│   │   ├── dashboard.py
+│   │   ├── visibility.py
+│   │   ├── accuracy.py
+│   │   ├── competitors.py
+│   │   ├── actions.py
+│   │   ├── crawl.py
+│   │   └── ethics.py
+│   ├── services/
+│   │   ├── auth_service.py
+│   │   ├── run_orchestrator.py
+│   │   ├── query_runner.py
+│   │   ├── fact_checker.py
+│   │   ├── crawler.py
+│   │   ├── content_generator.py
+│   │   ├── root_cause.py
+│   │   └── scoring.py
+│   ├── jobs/
+│   │   └── __init__.py   # legacy namespace only (no scheduled automations)
 │   └── utils/
-│       ├── llm_clients.py       # Wrappers for OpenAI, Anthropic, Gemini
-│       └── schema_validator.py  # Validates JSON-LD schema markup
-│
-├── migrations/                  # Auto-generated by Flask-Migrate
-│   └── versions/
-│
-├── instance/
-│   └── vigil.db                 # SQLite database file (gitignored)
-│
+│       ├── llm_clients.py
+│       └── schema_validator.py
+├── migrations/
 ├── tests/
-│   ├── test_models.py
-│   ├── test_fact_checker.py
-│   └── test_crawler.py
-│
-├── config.py                    # Config classes (Dev, Prod, Test)
-├── run.py                       # Entry point
-├── requirements.txt
-└── .env                         # API keys, secrets (gitignored)
+├── config.py
+├── run.py
+└── requirements.txt
 ```
 
 ---
 
-## 3. APP SETUP & CONFIGURATION
+## 7) Background Processing Strategy (No Scheduler)
 
-### config.py
-```python
-import os
+There is no APScheduler-driven global loop.
 
-class Config:
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod")
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+Background execution is request-driven:
+- frontend start action creates queued run
+- orchestrator starts worker thread/job for that run
+- worker updates status and history
 
-class DevelopmentConfig(Config):
-    DEBUG = True
-    SQLALCHEMY_DATABASE_URI = "sqlite:///vigil.db"
-
-class ProductionConfig(Config):
-    DEBUG = False
-    # Swap to Postgres: "postgresql://user:pass@host/vigil"
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
-
-config = {
-    "development": DevelopmentConfig,
-    "production": ProductionConfig,
-    "default": DevelopmentConfig
-}
-```
-
-### app/extensions.py
-```python
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-
-# Single instances — imported by models and app factory
-db = SQLAlchemy()
-migrate = Migrate()
-```
-
-### app/__init__.py
-```python
-from flask import Flask
-from .extensions import db, migrate
-from config import config
-
-def create_app(config_name="default"):
-    app = Flask(__name__)
-    app.config.from_object(config[config_name])
-
-    # Initialize extensions
-    db.init_app(app)
-    migrate.init_app(app, db)
-
-    # Import all models so Flask-Migrate can see them
-    from .models import (
-        company, query, accuracy,
-        crawl, content, competitor,
-        source, ethics
-    )
-
-    # Register blueprints
-    from .routes.dashboard import bp as dashboard_bp
-    from .routes.visibility import bp as visibility_bp
-    from .routes.accuracy import bp as accuracy_bp
-    from .routes.competitors import bp as competitors_bp
-    from .routes.actions import bp as actions_bp
-    from .routes.query_tester import bp as query_tester_bp
-
-    app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
-    app.register_blueprint(visibility_bp, url_prefix="/api/visibility")
-    app.register_blueprint(accuracy_bp, url_prefix="/api/accuracy")
-    app.register_blueprint(competitors_bp, url_prefix="/api/competitors")
-    app.register_blueprint(actions_bp, url_prefix="/api/actions")
-    app.register_blueprint(query_tester_bp, url_prefix="/api/query")
-
-    return app
-```
+For production scale, switch executor to Celery/RQ/SQS without changing API contracts.
 
 ---
 
-## 4. ALL DATA MODELS
+## 8) API Contract Summary
+
+### Auth
+- `POST /api/auth/register-company`
+- `POST /api/auth/request-magic-link`
+- `POST /api/auth/verify-magic-link`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+
+### Runs + History
+- `POST /api/runs/generate-prompts`
+- `PATCH /api/runs/<run_id>/queries`
+- `POST /api/runs/<run_id>/start`
+- `GET /api/runs/<run_id>/status`
+- `GET /api/runs/history`
+- `GET /api/runs/history/<run_id>`
+
+### Existing Analytics
+- `GET /api/dashboard/...`
+- `GET /api/visibility/...`
+- `GET /api/accuracy/...`
+- `GET /api/competitors/...`
+- `GET /api/actions/...`
+- `GET /api/crawl/...`
+- `GET /api/ethics/...`
 
 ---
 
-### MODEL 1 — Company
-**File:** `app/models/company.py`
+## 9) Notes for Frontend Team
 
-**What it represents:**
-The core entity. Every piece of data in Vigil belongs to a Company.
-One Vigil account monitors one or more companies (Home Depot, Capital One, etc.)
-
-**Why these fields:**
-- `industry_type` drives which query templates are loaded and what
-  compliance rules apply (financial vs retail vs media)
-- `primary_domain` is the URL Vigil crawls and the source of truth
-  for fact-checking
-- `bot_allowed` tracks whether GPTBot is permitted in robots.txt —
-  checked on every crawl, surfaces in the readability audit
-- `ai_visibility_score` and `accuracy_score` are cached calculated
-  values updated after every query run so the dashboard loads fast
-
-```python
-from app.extensions import db
-from datetime import datetime, timezone
-import enum
-
-class IndustryType(enum.Enum):
-    RETAIL        = "retail"          # Home Depot, HEB, eBay
-    FINANCIAL     = "financial"       # Capital One
-    TECHNOLOGY    = "technology"      # Dell, Cisco
-    MEDIA_SPORTS  = "media_sports"    # NFL
-    GROCERY       = "grocery"         # HEB specifically
-
-class Company(db.Model):
-    __tablename__ = "companies"
-
-    id                  = db.Column(db.Integer, primary_key=True)
-    name                = db.Column(db.String(100), nullable=False)
-    slug                = db.Column(db.String(50), unique=True, nullable=False)
-    # e.g. "capital_one", "home_depot", "dell"
-
-    industry_type       = db.Column(db.Enum(IndustryType), nullable=False)
-    primary_domain      = db.Column(db.String(255), nullable=False)
-    # e.g. "https://www.homedepot.com"
-
-    logo_url            = db.Column(db.String(500))
-
-    # Cached scores — recalculated after every query run batch
-    # Stored here so dashboard reads are instant (no heavy query on load)
-    ai_visibility_score = db.Column(db.Float, default=0.0)
-    # 0-100: % of monitored queries where brand was mentioned this week
-
-    accuracy_score      = db.Column(db.Float, default=0.0)
-    # 0-100: % of AI responses with all facts correct this week
-
-    top_rec_rate        = db.Column(db.Float, default=0.0)
-    # 0-100: % of queries where brand is position #1 recommendation
-
-    open_error_count    = db.Column(db.Integer, default=0)
-    # Count of active unresolved FactualErrors — shown as badge on dashboard
-
-    bot_allowed         = db.Column(db.Boolean, default=True)
-    # False = GPTBot blocked in robots.txt — critical error flag
-
-    last_crawled_at     = db.Column(db.DateTime)
-    last_queried_at     = db.Column(db.DateTime)
-    created_at          = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    query_templates     = db.relationship("QueryTemplate",   back_populates="company", cascade="all, delete-orphan")
-    query_runs          = db.relationship("QueryRun",         back_populates="company", cascade="all, delete-orphan")
-    crawl_jobs          = db.relationship("CrawlJob",         back_populates="company", cascade="all, delete-orphan")
-    competitors         = db.relationship("Competitor",       back_populates="company", cascade="all, delete-orphan")
-    content_fixes       = db.relationship("ContentFix",       back_populates="company", cascade="all, delete-orphan")
-    ethics_flags        = db.relationship("EthicsFlag",       back_populates="company", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<Company {self.name}>"
-
-    def to_dict(self):
-        return {
-            "id":                  self.id,
-            "name":                self.name,
-            "slug":                self.slug,
-            "industry_type":       self.industry_type.value,
-            "primary_domain":      self.primary_domain,
-            "ai_visibility_score": self.ai_visibility_score,
-            "accuracy_score":      self.accuracy_score,
-            "top_rec_rate":        self.top_rec_rate,
-            "open_error_count":    self.open_error_count,
-            "bot_allowed":         self.bot_allowed,
-            "last_crawled_at":     self.last_crawled_at.isoformat() if self.last_crawled_at else None,
-            "last_queried_at":     self.last_queried_at.isoformat() if self.last_queried_at else None,
-        }
-```
+- Login UX can be one field + button:
+  - email input
+  - “Send magic link” button
+- After link verify, use session token in `Authorization: Bearer ...`.
+- Run flow UX should be:
+  1) choose topic + count
+  2) edit prompts
+  3) start
+  4) poll status
+  5) view history detail
 
 ---
 
-### MODEL 2 — QueryTemplate
-**File:** `app/models/query.py`
-
-**What it represents:**
-The library of questions Vigil asks AI platforms every 24 hours.
-Each company has 50-100 templates covering their most important
-customer query patterns.
-
-**Why these fields:**
-- `query_text` is the exact question sent to the AI
-  e.g. "What is the best cordless drill under $200 for a beginner?"
-- `category` groups queries so accuracy can be broken down by type
-  on the dashboard (pricing queries, feature queries, etc.)
-- `priority` determines which queries run first if rate limits hit
-- `expected_brand_mention` is whether we expect the company to be
-  mentioned — queries where they should be mentioned but aren't
-  are more serious gaps than optional queries
-
-```python
-class QueryCategory(enum.Enum):
-    PRODUCT_RECOMMENDATION = "product_recommendation"
-    # "best drill under $200"
-
-    PRODUCT_FACT           = "product_fact"
-    # "what is the price of Milwaukee M18"
-
-    COMPETITOR_COMPARISON  = "competitor_comparison"
-    # "Home Depot vs Lowe's for lumber"
-
-    POLICY_QUESTION        = "policy_question"
-    # "what is Home Depot's return policy"
-
-    BRAND_GENERAL          = "brand_general"
-    # "tell me about Capital One credit cards"
-
-    USE_CASE               = "use_case"
-    # "what tools do I need to tile a bathroom"
-
-class QueryTemplate(db.Model):
-    __tablename__ = "query_templates"
-
-    id                      = db.Column(db.Integer, primary_key=True)
-    company_id              = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    query_text              = db.Column(db.Text, nullable=False)
-    # The actual question sent to AI platforms
-
-    category                = db.Column(db.Enum(QueryCategory), nullable=False)
-    priority                = db.Column(db.Integer, default=5)
-    # 1 = highest priority, 10 = lowest
-
-    expected_brand_mention  = db.Column(db.Boolean, default=True)
-    # True = company SHOULD appear in answer for this query
-
-    is_active               = db.Column(db.Boolean, default=True)
-    created_at              = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    company                 = db.relationship("Company", back_populates="query_templates")
-    query_runs              = db.relationship("QueryRun", back_populates="template", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 3 — QueryRun
-**File:** `app/models/query.py`
-
-**What it represents:**
-One execution of one QueryTemplate against one AI platform.
-Every 24 hours, Vigil runs each template against ChatGPT, Gemini,
-Perplexity, and Claude — creating 4 QueryRun rows per template.
-
-**Why these fields:**
-- `platform` tracks which AI platform gave this answer
-- `raw_response` stores the complete AI response text —
-  used by the fact-checker in Step 4
-- `brand_mentioned` is the key metric for visibility scoring
-- `brand_position` is what position the company was in
-  (1 = first recommendation, null = not mentioned)
-- `response_latency_ms` helps identify if a platform is
-  degraded (slow responses = possibly cached or rate-limited)
-
-```python
-class LLMPlatform(enum.Enum):
-    CHATGPT    = "chatgpt"
-    GEMINI     = "gemini"
-    PERPLEXITY = "perplexity"
-    CLAUDE     = "claude"
-
-class RunStatus(enum.Enum):
-    PENDING    = "pending"
-    RUNNING    = "running"
-    COMPLETED  = "completed"
-    FAILED     = "failed"
-
-class QueryRun(db.Model):
-    __tablename__ = "query_runs"
-
-    id                   = db.Column(db.Integer, primary_key=True)
-    company_id           = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-    template_id          = db.Column(db.Integer, db.ForeignKey("query_templates.id"), nullable=False)
-
-    platform             = db.Column(db.Enum(LLMPlatform), nullable=False)
-    status               = db.Column(db.Enum(RunStatus), default=RunStatus.PENDING)
-
-    raw_response         = db.Column(db.Text)
-    # Full text of what the AI said — stored for fact-checking
-
-    brand_mentioned      = db.Column(db.Boolean)
-    # Was the company mentioned anywhere in the response?
-
-    brand_position       = db.Column(db.Integer)
-    # 1 = recommended first, 2 = second, null = not mentioned
-
-    citations_found      = db.Column(db.JSON)
-    # List of URLs/sources the AI cited in its response
-    # e.g. ["nerdwallet.com/article/...", "reddit.com/r/..."]
-
-    response_latency_ms  = db.Column(db.Integer)
-    error_message        = db.Column(db.Text)
-    # Populated if status = FAILED
-
-    ran_at               = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    company              = db.relationship("Company", back_populates="query_runs")
-    template             = db.relationship("QueryTemplate", back_populates="query_runs")
-    accuracy_check       = db.relationship("AccuracyCheck", back_populates="query_run", uselist=False)
-    # One query run → one accuracy check (one-to-one)
-```
-
----
-
-### MODEL 4 — AccuracyCheck
-**File:** `app/models/accuracy.py`
-
-**What it represents:**
-The result of the fact-checking step for one QueryRun.
-After the AI responds, Vigil fetches the company's live page
-and compares every factual claim in the AI response against it.
-This is the core of the ethics layer.
-
-**Why these fields:**
-- `live_page_snapshot` stores what the live page said at check time —
-  important because pages change, so you need a record of what
-  was true when the check ran
-- `claims_checked` is total number of factual statements found
-- `claims_correct` / `claims_wrong` gives the accuracy percentage
-- `overall_accurate` is the single boolean used in score calculation
-
-```python
-class AccuracyCheck(db.Model):
-    __tablename__ = "accuracy_checks"
-
-    id                   = db.Column(db.Integer, primary_key=True)
-    query_run_id         = db.Column(db.Integer, db.ForeignKey("query_runs.id"), unique=True, nullable=False)
-    # unique=True enforces one-to-one with QueryRun
-
-    live_page_url        = db.Column(db.String(500))
-    # Which page was fetched as the source of truth
-
-    live_page_snapshot   = db.Column(db.Text)
-    # The actual text content of that page at check time
-    # NOT the full HTML — just the extracted facts
-
-    claims_checked       = db.Column(db.Integer, default=0)
-    claims_correct       = db.Column(db.Integer, default=0)
-    claims_wrong         = db.Column(db.Integer, default=0)
-
-    overall_accurate     = db.Column(db.Boolean)
-    # True only if ALL claims were correct
-    # Used as the binary for accuracy score calculation
-
-    checked_at           = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    query_run            = db.relationship("QueryRun", back_populates="accuracy_check")
-    factual_errors       = db.relationship("FactualError", back_populates="accuracy_check", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 5 — FactualError
-**File:** `app/models/accuracy.py`
-
-**What it represents:**
-One specific wrong fact found in one AI response.
-This is the row that powers the Error Log tab on the dashboard.
-Every error has a root cause, a severity, and a fix attached.
-
-**Why these fields:**
-- `error_type` categorizes the error for the accuracy breakdown chart
-- `ai_stated_value` vs `correct_value` is the side-by-side shown
-  in the error log
-- `root_cause` is the diagnosis: JavaScript-hidden, stale schema,
-  third-party source, etc.
-- `root_cause_detail` is the specific explanation in plain English
-- `is_resolved` tracks whether the fix was applied and verified
-- `compliance_risk` is the ethics layer flag — True for financial
-  misinformation that has regulatory implications
-
-```python
-class ErrorType(enum.Enum):
-    WRONG_PRICE         = "wrong_price"
-    WRONG_SPEC          = "wrong_spec"
-    WRONG_POLICY        = "wrong_policy"
-    WRONG_AVAILABILITY  = "wrong_availability"
-    WRONG_REWARDS       = "wrong_rewards"
-    DISCONTINUED_PRODUCT= "discontinued_product"
-    WRONG_FEE           = "wrong_fee"
-    HALLUCINATED_FEATURE= "hallucinated_feature"
-
-class ErrorSeverity(enum.Enum):
-    CRITICAL = "critical"   # Wrong price, APR, fee — consumer harm possible
-    HIGH     = "high"       # Wrong spec, discontinued product
-    MEDIUM   = "medium"     # Wrong minor detail, small inaccuracy
-    LOW      = "low"        # Outdated but harmless information
-
-class RootCause(enum.Enum):
-    JS_HIDDEN_CONTENT    = "js_hidden_content"
-    # AI bot could not read because content loads via JavaScript
-
-    INVALID_SCHEMA       = "invalid_schema"
-    # Schema markup exists but is malformed — AI ignored it
-
-    MISSING_SCHEMA       = "missing_schema"
-    # No schema markup at all on the relevant page
-
-    THIRD_PARTY_SOURCE   = "third_party_source"
-    # AI trusted NerdWallet/Reddit over company's own page
-
-    STALE_CONTENT        = "stale_content"
-    # Page exists and is readable but information is outdated
-
-    BOT_BLOCKED          = "bot_blocked"
-    # GPTBot was blocked from this page in robots.txt
-
-    CONTENT_GAP          = "content_gap"
-    # Company simply doesn't have content covering this query
-
-    TRAINING_DATA        = "training_data"
-    # Error in AI's training data — hardest to fix directly
-
-class FactualError(db.Model):
-    __tablename__ = "factual_errors"
-
-    id                   = db.Column(db.Integer, primary_key=True)
-    accuracy_check_id    = db.Column(db.Integer, db.ForeignKey("accuracy_checks.id"), nullable=False)
-    company_id           = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    error_type           = db.Column(db.Enum(ErrorType), nullable=False)
-    severity             = db.Column(db.Enum(ErrorSeverity), nullable=False)
-
-    # What AI said vs what is true
-    field_name           = db.Column(db.String(100))
-    # e.g. "APR", "price", "annual_fee", "RAM", "return_policy_days"
-
-    ai_stated_value      = db.Column(db.Text)
-    # e.g. "19.99% variable APR"
-
-    correct_value        = db.Column(db.Text)
-    # e.g. "24.99% variable APR (as of January 2026)"
-
-    source_page_url      = db.Column(db.String(500))
-    # The live company page where correct value was found
-
-    # Root cause diagnosis
-    root_cause           = db.Column(db.Enum(RootCause))
-    root_cause_detail    = db.Column(db.Text)
-    # Plain English explanation: "NerdWallet article from 2023 still
-    # says 19.99% and ranks above your own page for APR queries"
-
-    third_party_source   = db.Column(db.String(255))
-    # If root_cause = THIRD_PARTY_SOURCE, which site is it?
-    # e.g. "nerdwallet.com"
-
-    # Status tracking
-    is_resolved          = db.Column(db.Boolean, default=False)
-    resolved_at          = db.Column(db.DateTime)
-    resolution_note      = db.Column(db.Text)
-
-    # Ethics layer
-    compliance_risk      = db.Column(db.Boolean, default=False)
-    # True for financial companies when pricing/terms are wrong
-    compliance_flag_sent = db.Column(db.Boolean, default=False)
-    # True once legal team has been alerted
-
-    occurrence_count     = db.Column(db.Integer, default=1)
-    # How many times this exact error has been seen across runs
-    # Incremented instead of creating duplicate rows
-
-    first_seen_at        = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    last_seen_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    accuracy_check       = db.relationship("AccuracyCheck", back_populates="factual_errors")
-    content_fix          = db.relationship("ContentFix", back_populates="factual_error", uselist=False)
-    # Each error can have one generated fix
-```
-
----
-
-### MODEL 6 — CrawlJob
-**File:** `app/models/crawl.py`
-
-**What it represents:**
-One full website crawl run for a company.
-Vigil crawls every important product page weekly, mimicking
-exactly what GPTBot does — no JavaScript, raw HTML only.
-CrawlJob is the parent record; PageAudit is one page per crawl.
-
-```python
-class CrawlStatus(enum.Enum):
-    PENDING   = "pending"
-    RUNNING   = "running"
-    COMPLETED = "completed"
-    FAILED    = "failed"
-
-class CrawlJob(db.Model):
-    __tablename__ = "crawl_jobs"
-
-    id              = db.Column(db.Integer, primary_key=True)
-    company_id      = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    status          = db.Column(db.Enum(CrawlStatus), default=CrawlStatus.PENDING)
-    pages_found     = db.Column(db.Integer, default=0)
-    pages_audited   = db.Column(db.Integer, default=0)
-    pages_with_issues = db.Column(db.Integer, default=0)
-
-    # robots.txt findings
-    gptbot_allowed  = db.Column(db.Boolean)
-    # Read from robots.txt during crawl
-
-    started_at      = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    completed_at    = db.Column(db.DateTime)
-
-    # Relationships
-    company         = db.relationship("Company", back_populates="crawl_jobs")
-    page_audits     = db.relationship("PageAudit", back_populates="crawl_job", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 7 — PageAudit
-**File:** `app/models/crawl.py`
-
-**What it represents:**
-The audit result for one specific URL during a crawl.
-This is the most detailed technical record — it answers the
-question "what can AI actually see on this page right now?"
-
-**Why these fields:**
-- `bot_readable_text` is what AI actually sees — extracted by
-  crawling with no JavaScript execution
-- `human_readable_text` is what a real browser user sees —
-  fetched with JavaScript rendered
-- `content_delta` is the diff between the two — this IS the
-  gap that causes hallucinations
-- `has_valid_schema` drives the schema fix recommendations
-- `page_type` affects how the page is prioritized for fixes
-
-```python
-class PageType(enum.Enum):
-    PRODUCT_PAGE   = "product_page"
-    CATEGORY_PAGE  = "category_page"
-    FAQ_PAGE       = "faq_page"
-    POLICY_PAGE    = "policy_page"
-    HOMEPAGE       = "homepage"
-    BLOG_POST      = "blog_post"
-    COMPARISON     = "comparison"
-
-class PageAudit(db.Model):
-    __tablename__ = "page_audits"
-
-    id                      = db.Column(db.Integer, primary_key=True)
-    crawl_job_id            = db.Column(db.Integer, db.ForeignKey("crawl_jobs.id"), nullable=False)
-    company_id              = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    url                     = db.Column(db.String(1000), nullable=False)
-    page_type               = db.Column(db.Enum(PageType))
-
-    # The core gap measurement
-    bot_readable_text       = db.Column(db.Text)
-    # What GPTBot actually sees (no JS execution)
-
-    human_readable_text     = db.Column(db.Text)
-    # What a real browser sees (JS rendered)
-
-    content_delta           = db.Column(db.JSON)
-    # Structured diff: which specific facts are visible to AI vs hidden
-    # e.g. {"price": {"bot_sees": null, "human_sees": "$1,299"}}
-
-    # Schema markup findings
-    has_schema_markup       = db.Column(db.Boolean, default=False)
-    has_valid_schema        = db.Column(db.Boolean, default=False)
-    schema_type             = db.Column(db.String(50))
-    # e.g. "Product", "FAQPage", "BreadcrumbList"
-
-    schema_raw              = db.Column(db.Text)
-    # Raw JSON-LD found on page — stored for error diagnosis
-
-    schema_errors           = db.Column(db.JSON)
-    # List of specific validation errors found
-    # e.g. ["Missing @type field", "price not in valid format"]
-
-    # Content quality signals
-    content_type            = db.Column(db.String(20))
-    # "informational" = AI will cite this
-    # "promotional"   = AI avoids citing sales copy
-
-    word_count              = db.Column(db.Integer)
-    last_modified           = db.Column(db.DateTime)
-    # From HTTP Last-Modified header — recency signal for AI
-
-    days_since_updated      = db.Column(db.Integer)
-    # Calculated field: today - last_modified
-
-    # Issue flags
-    price_js_hidden         = db.Column(db.Boolean, default=False)
-    specs_js_hidden         = db.Column(db.Boolean, default=False)
-    availability_js_hidden  = db.Column(db.Boolean, default=False)
-    is_bot_blocked          = db.Column(db.Boolean, default=False)
-    # True if this specific URL is blocked (beyond robots.txt)
-
-    # Overall readability score for this page
-    readability_score       = db.Column(db.Float)
-    # 0-100: higher = AI can read more of this page's content
-
-    audited_at              = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    crawl_job               = db.relationship("CrawlJob", back_populates="page_audits")
-    schema_issues           = db.relationship("SchemaIssue", back_populates="page_audit", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 8 — SchemaIssue
-**File:** `app/models/crawl.py`
-
-**What it represents:**
-One specific problem found in a page's schema markup.
-Stored separately from PageAudit because one page can have
-multiple schema issues and each needs its own generated fix.
-
-```python
-class SchemaIssueType(enum.Enum):
-    MISSING_TYPE        = "missing_type"       # No @type field
-    MISSING_CONTEXT     = "missing_context"    # No @context field
-    INVALID_PRICE       = "invalid_price"      # Price not in correct format
-    MISSING_PRICE       = "missing_price"      # Product schema with no price
-    MISSING_AVAILABILITY= "missing_availability"
-    INVALID_JSON        = "invalid_json"       # JSON-LD won't parse
-    WRONG_TYPE          = "wrong_type"         # Wrong schema type for page
-
-class SchemaIssue(db.Model):
-    __tablename__ = "schema_issues"
-
-    id              = db.Column(db.Integer, primary_key=True)
-    page_audit_id   = db.Column(db.Integer, db.ForeignKey("page_audits.id"), nullable=False)
-
-    issue_type      = db.Column(db.Enum(SchemaIssueType), nullable=False)
-    description     = db.Column(db.Text)
-    # Plain English: "Missing @type field — AI cannot identify
-    # what kind of content this is"
-
-    current_schema  = db.Column(db.Text)
-    # What the schema currently says
-
-    suggested_fix   = db.Column(db.Text)
-    # The corrected JSON-LD — ready to paste into the page
-
-    page_audit      = db.relationship("PageAudit", back_populates="schema_issues")
-```
-
----
-
-### MODEL 9 — Competitor
-**File:** `app/models/competitor.py`
-
-**What it represents:**
-A competitor that Vigil tracks for a given company.
-Home Depot tracks Lowe's and Amazon. Capital One tracks Chase
-and Discover. Vigil runs the same queries for competitors
-to build the ranking comparison table.
-
-```python
-class Competitor(db.Model):
-    __tablename__ = "competitors"
-
-    id              = db.Column(db.Integer, primary_key=True)
-    company_id      = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    name            = db.Column(db.String(100), nullable=False)
-    domain          = db.Column(db.String(255), nullable=False)
-    is_primary      = db.Column(db.Boolean, default=False)
-    # True = top competitor, shown prominently in dashboard
-
-    # Relationships
-    company         = db.relationship("Company", back_populates="competitors")
-    rankings        = db.relationship("CompetitorRanking", back_populates="competitor", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 10 — CompetitorRanking
-**File:** `app/models/competitor.py`
-
-**What it represents:**
-One data point: for one query run, where did each competitor rank?
-This powers the competitor ranking table and content gap analysis.
-
-**Why these fields:**
-- `our_position` vs `their_position` is the direct comparison
-- `they_were_cited_from` tracks which sources AI used for the
-  competitor — reveals what content the competitor has that
-  we don't (content gap analysis)
-- `content_gap_notes` is auto-generated by root_cause.py —
-  plain English explanation of why they ranked higher
-
-```python
-class CompetitorRanking(db.Model):
-    __tablename__ = "competitor_rankings"
-
-    id                  = db.Column(db.Integer, primary_key=True)
-    competitor_id       = db.Column(db.Integer, db.ForeignKey("competitors.id"), nullable=False)
-    query_run_id        = db.Column(db.Integer, db.ForeignKey("query_runs.id"), nullable=False)
-
-    our_position        = db.Column(db.Integer)
-    # Position of the monitored company (null = not mentioned)
-
-    their_position      = db.Column(db.Integer)
-    # Position of this competitor (null = not mentioned)
-
-    they_were_cited_from = db.Column(db.JSON)
-    # Sources AI used when citing competitor
-    # e.g. ["chase.com/freedom", "creditcards.com"]
-
-    content_gap_notes   = db.Column(db.Text)
-    # Why they ranked higher — auto-generated analysis
-    # e.g. "Chase has dedicated FAQ page for 'no annual fee' query.
-    # Capital One has no equivalent page."
-
-    recorded_at         = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    competitor          = db.relationship("Competitor", back_populates="rankings")
-    query_run           = db.relationship("QueryRun")
-```
-
----
-
-### MODEL 11 — CitationSource
-**File:** `app/models/source.py`
-
-**What it represents:**
-A third-party domain that AI uses as a source when talking
-about a company. NerdWallet, Reddit, The Points Guy, etc.
-This is the master list of all sources observed across all query runs.
-
-```python
-class SourceType(enum.Enum):
-    COMPANY_OWNED = "company_owned"   # The company's own domain
-    REVIEW_SITE   = "review_site"     # NerdWallet, The Points Guy
-    SOCIAL        = "social"          # Reddit, Twitter/X
-    NEWS          = "news"            # Press articles
-    AGGREGATOR    = "aggregator"      # Comparison sites
-    FORUM         = "forum"           # Generic forums
-
-class CitationSource(db.Model):
-    __tablename__ = "citation_sources"
-
-    id              = db.Column(db.Integer, primary_key=True)
-    company_id      = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-
-    domain          = db.Column(db.String(255), nullable=False)
-    source_type     = db.Column(db.Enum(SourceType), nullable=False)
-
-    citation_count  = db.Column(db.Integer, default=0)
-    # Total times AI has cited this domain when discussing the company
-
-    accuracy_rate   = db.Column(db.Float)
-    # % of times this source led to accurate AI responses
-    # Low accuracy = this source is giving AI wrong information
-
-    last_seen_at    = db.Column(db.DateTime)
-
-    # Relationships
-    mentions        = db.relationship("SourceMention", back_populates="source", cascade="all, delete-orphan")
-```
-
----
-
-### MODEL 12 — SourceMention
-**File:** `app/models/source.py`
-
-**What it represents:**
-One instance of a specific source being cited in one query run.
-Links sources back to individual query runs for full traceability.
-
-```python
-class SourceMention(db.Model):
-    __tablename__ = "source_mentions"
-
-    id              = db.Column(db.Integer, primary_key=True)
-    source_id       = db.Column(db.Integer, db.ForeignKey("citation_sources.id"), nullable=False)
-    query_run_id    = db.Column(db.Integer, db.ForeignKey("query_runs.id"), nullable=False)
-
-    cited_url       = db.Column(db.String(1000))
-    # Specific URL cited, not just domain
-    # e.g. "nerdwallet.com/article/capital-one-quicksilver-review-2023"
-
-    led_to_error    = db.Column(db.Boolean, default=False)
-    # True if this citation was the source of a FactualError
-    # Links source tracking to error tracking
-
-    mentioned_at    = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    source          = db.relationship("CitationSource", back_populates="mentions")
-    query_run       = db.relationship("QueryRun")
-```
-
----
-
-### MODEL 13 — ContentFix
-**File:** `app/models/content.py`
-
-**What it represents:**
-An auto-generated piece of content that fixes a specific
-FactualError or content gap. This is the core differentiator —
-not just flagging problems but generating the fix.
-
-**Why these fields:**
-- `fix_type` determines what kind of content was generated
-- `generated_content` is the actual ready-to-publish content
-  Could be HTML, JSON-LD schema markup, or plain text article
-- `target_queries` tracks which specific queries this fix
-  is intended to improve — used to measure if it worked
-- `status` tracks the fix lifecycle from generation to live
-- `before_score` / `after_score` is how we prove it worked
-
-```python
-class FixType(enum.Enum):
-    USE_CASE_BLOCK    = "use_case_block"
-    # Short content block connecting product specs to query language
-    # e.g. "Perfect for cabinet installation: ..."
-
-    FAQ_PAGE          = "faq_page"
-    # Full FAQ page targeting specific query cluster
-
-    SCHEMA_MARKUP     = "schema_markup"
-    # JSON-LD to paste into page <head>
-
-    COMPARISON_PAGE   = "comparison_page"
-    # Full comparison page vs named competitor
-
-    CORRECTION_BRIEF  = "correction_brief"
-    # Pre-written update to send to third-party site editors
-
-    CONTENT_REFRESH   = "content_refresh"
-    # Updated version of existing stale page content
-
-    ROBOTS_FIX        = "robots_fix"
-    # robots.txt change instruction (not content, but fix)
-
-class FixStatus(enum.Enum):
-    GENERATED  = "generated"   # AI wrote it, not yet reviewed
-    IN_REVIEW  = "in_review"   # Company team is reviewing
-    APPROVED   = "approved"    # Approved, not yet published
-    PUBLISHED  = "published"   # Live on the website
-    REJECTED   = "rejected"    # Company decided not to use it
-    SUPERSEDED = "superseded"  # A newer fix replaced this one
-
-class ContentFix(db.Model):
-    __tablename__ = "content_fixes"
-
-    id                  = db.Column(db.Integer, primary_key=True)
-    company_id          = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-    factual_error_id    = db.Column(db.Integer, db.ForeignKey("factual_errors.id"), nullable=True)
-    # Null if fix is for a content gap (not a specific error)
-
-    fix_type            = db.Column(db.Enum(FixType), nullable=False)
-    status              = db.Column(db.Enum(FixStatus), default=FixStatus.GENERATED)
-
-    title               = db.Column(db.String(255))
-    # Human-readable title: "FAQ Page: No Annual Fee Cards"
-
-    problem_description = db.Column(db.Text)
-    # Why this fix is needed — shown in Action Center
-    # e.g. "ChatGPT cites wrong APR because NerdWallet 2023
-    # article ranks above your rates page"
-
-    generated_content   = db.Column(db.Text)
-    # The actual content ready to publish
-    # For SCHEMA_MARKUP: valid JSON-LD
-    # For USE_CASE_BLOCK: HTML fragment
-    # For FAQ_PAGE: full article in Markdown or HTML
-    # For CORRECTION_BRIEF: email draft to third-party site
-
-    target_url          = db.Column(db.String(500))
-    # Which page should this content go on?
-
-    target_queries      = db.Column(db.JSON)
-    # List of QueryTemplate IDs this fix should improve
-    # Used to measure effectiveness after publishing
-
-    estimated_impact    = db.Column(db.String(20))
-    # "high", "medium", "low" — shown in Action Center
-
-    estimated_effort    = db.Column(db.String(50))
-    # "5 minutes", "2-4 hours", etc. — shown in Action Center
-
-    assigned_team       = db.Column(db.String(50))
-    # "developer", "content_team", "legal", "seo"
-
-    # Measurement
-    before_score        = db.Column(db.Float)
-    # Mention rate for target_queries BEFORE publishing
-
-    after_score         = db.Column(db.Float)
-    # Mention rate for target_queries AFTER publishing
-    # Populated by score_updater job 30-60 days post-publish
-
-    score_delta         = db.Column(db.Float)
-    # after_score - before_score = proof the fix worked
-
-    generated_at        = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    published_at        = db.Column(db.DateTime)
-    review_notes        = db.Column(db.Text)
-
-    # Relationships
-    company             = db.relationship("Company", back_populates="content_fixes")
-    factual_error       = db.relationship("FactualError", back_populates="content_fix")
-```
-
----
-
-### MODEL 14 — EthicsFlag
-**File:** `app/models/ethics.py`
-
-**What it represents:**
-A record of a serious ethics or compliance issue detected
-in AI responses. Separate from FactualError because ethics
-flags have different workflows — they go to legal/compliance,
-not just the marketing team.
-
-**Why separate from FactualError:**
-FactualErrors are operational issues — wrong price, needs fixing.
-EthicsFlags are compliance events — wrong APR on a financial
-product may need legal documentation, disclosure to regulators,
-and a compliance audit trail. Different workflow, different owners.
-
-```python
-class EthicsCategory(enum.Enum):
-    FINANCIAL_MISINFORMATION = "financial_misinformation"
-    # Wrong APR, fees, rates — Capital One CFPB risk
-
-    CONSUMER_HARM            = "consumer_harm"
-    # Wrong product recommendation that could cause physical harm
-    # e.g. wrong tool for safety-critical job (Home Depot)
-
-    LICENSING_VIOLATION      = "licensing_violation"
-    # Unauthorized products recommended (NFL)
-
-    UNFAIR_COMPARISON        = "unfair_comparison"
-    # Competitor compared on outdated/misleading basis
-
-    DISCRIMINATORY_RESPONSE  = "discriminatory_response"
-    # AI recommending different products based on demographic
-
-class EthicsFlag(db.Model):
-    __tablename__ = "ethics_flags"
-
-    id                  = db.Column(db.Integer, primary_key=True)
-    company_id          = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-    factual_error_id    = db.Column(db.Integer, db.ForeignKey("factual_errors.id"), nullable=True)
-    query_run_id        = db.Column(db.Integer, db.ForeignKey("query_runs.id"), nullable=False)
-
-    category            = db.Column(db.Enum(EthicsCategory), nullable=False)
-    description         = db.Column(db.Text, nullable=False)
-    # Full plain-English description of the ethics issue
-
-    ai_response_excerpt = db.Column(db.Text)
-    # The specific part of the AI response that triggered this flag
-
-    regulatory_framework = db.Column(db.String(100))
-    # Which regulation is relevant: "CFPB", "FTC", "NFL_Licensing"
-
-    alert_sent_to       = db.Column(db.String(255))
-    # Who was notified: "legal@company.com, compliance@company.com"
-
-    is_acknowledged     = db.Column(db.Boolean, default=False)
-    acknowledged_by     = db.Column(db.String(100))
-    acknowledged_at     = db.Column(db.DateTime)
-
-    is_resolved         = db.Column(db.Boolean, default=False)
-    resolution_notes    = db.Column(db.Text)
-
-    flagged_at          = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-
-    # Relationships
-    company             = db.relationship("Company", back_populates="ethics_flags")
-    query_run           = db.relationship("QueryRun")
-```
-
----
-
-## 5. MODEL RELATIONSHIPS MAP
-
-```
-Company (1)
-  │
-  ├──(many)── QueryTemplate (50-100 per company)
-  │               │
-  │               └──(many)── QueryRun (1 per platform per template per day)
-  │                               │
-  │                               ├──(one)── AccuracyCheck
-  │                               │              │
-  │                               │              └──(many)── FactualError
-  │                               │                              │
-  │                               │                              ├──(one)── ContentFix
-  │                               │                              └──(one)── EthicsFlag
-  │                               │
-  │                               └──(many)── SourceMention ──► CitationSource
-  │
-  ├──(many)── CrawlJob (weekly)
-  │               │
-  │               └──(many)── PageAudit (one per URL)
-  │                               │
-  │                               └──(many)── SchemaIssue
-  │
-  ├──(many)── Competitor
-  │               │
-  │               └──(many)── CompetitorRanking ──► QueryRun
-  │
-  └──(many)── ContentFix (for content gaps, not linked to errors)
-```
-
----
-
-## 6. HOW EACH MODEL CONNECTS TO THE DASHBOARD TAB
-
-| Dashboard Tab | Primary Models Used |
-|---|---|
-| Overview — 4 headline scores | `Company` (cached scores) |
-| Overview — Zero-click estimate | `QueryRun` (total runs vs UTM visits) |
-| Overview — Trend charts | `Company` score history (add `ScoreSnapshot` model for history) |
-| Visibility — LLM mention rates | `QueryRun` grouped by `platform` + `brand_mentioned` |
-| Visibility — Source domains | `CitationSource` ordered by `citation_count` |
-| Visibility — Winning/losing queries | `QueryTemplate` + `QueryRun` aggregated |
-| Competitors — Ranking table | `CompetitorRanking` aggregated by competitor |
-| Competitors — Content gap | `CompetitorRanking.content_gap_notes` |
-| Accuracy — By category | `FactualError` grouped by `error_type` |
-| Accuracy — By platform | `AccuracyCheck` joined with `QueryRun.platform` |
-| Accuracy — Readability audit | `PageAudit` + `SchemaIssue` |
-| Error Log | `FactualError` with `AccuracyCheck` + `ContentFix` |
-| Action Center | `ContentFix` ordered by `estimated_impact` |
-| Ethics Scorecard | `EthicsFlag` aggregated by `category` |
-
----
-
-## 7. BACKGROUND JOBS
-
-### jobs/daily_queries.py
-Runs every 24 hours. For every company, for every active
-QueryTemplate, sends the query to all 4 LLM platforms.
-Creates one QueryRun per platform. Triggers fact-checking
-on completion. Updates Company cached scores after all runs.
-
-### jobs/weekly_crawl.py
-Runs every 7 days. Crawls all important pages on each
-company's website. Creates CrawlJob + PageAudit records.
-Triggers schema validation. Updates bot_allowed flag on Company.
-
-### jobs/score_updater.py
-Runs after every daily_queries batch. Recalculates and updates
-the 4 cached scores on the Company model so dashboard loads fast.
-Also checks ContentFix records that were published 30+ days ago
-and computes after_score vs before_score to prove fixes worked.
-
----
-
-## 8. API ROUTE STRUCTURE
-
-```
-GET  /api/dashboard/overview/<company_slug>
-     → Returns Company scores + zero-click estimate + 8-week trends
-
-GET  /api/visibility/<company_slug>
-     → Returns LLM mention rates, source domains, winning/losing queries
-
-GET  /api/competitors/<company_slug>
-     → Returns ranking table + content gap analysis per competitor
-
-GET  /api/accuracy/<company_slug>
-     → Returns accuracy by category, by platform, readability audit
-
-GET  /api/errors/<company_slug>
-     → Returns all FactualErrors with root cause + fix attached
-
-GET  /api/actions/<company_slug>
-     → Returns ContentFix queue ordered by impact/effort
-
-PATCH /api/actions/<fix_id>/status
-     → Update ContentFix status (approve, publish, reject)
-
-POST /api/query/simulate
-     → Body: { company_slug, query_text }
-     → Runs a live query against all platforms + fact checks it
-     → Returns: mention rates, AI responses, fact check results
-
-GET  /api/ethics/<company_slug>
-     → Returns EthicsFlag records + compliance status
-```
-
----
-
-## QUICK START
-
-```bash
-# 1. Install dependencies
-pip install flask flask-sqlalchemy flask-migrate flask-cors \
-            openai anthropic httpx beautifulsoup4 apscheduler
-
-# 2. Initialize database
-flask db init
-flask db migrate -m "initial models"
-flask db upgrade
-
-# 3. Run development server
-python run.py
-
-# 4. Add a company via Python shell
-flask shell
->>> from app.models.company import Company, IndustryType
->>> from app.extensions import db
->>> c = Company(
-...     name="Home Depot",
-...     slug="home_depot",
-...     industry_type=IndustryType.RETAIL,
-...     primary_domain="https://www.homedepot.com"
-... )
->>> db.session.add(c)
->>> db.session.commit()
-```
+## 10) Next Backend Implementation Steps
+
+1. Implement `auth_service.py` token issuance + email provider integration.
+2. Implement `run_orchestrator.py` threaded worker execution path.
+3. Register new blueprints in app factory.
+4. Add migration for new auth/history tables.
+5. Add integration tests for auth and run lifecycle.

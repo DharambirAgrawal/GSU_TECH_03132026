@@ -1,2 +1,11 @@
-requests
+Flask
+Flask-Cors
+Flask-SQLAlchemy
+Flask-Migrate
+pydantic
 python-dotenv
+requests
+httpx
+beautifulsoup4
+openai
+anthropic

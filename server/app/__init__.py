@@ -7,7 +7,7 @@
 # IMPORTS NEEDED:
 #   from flask import Flask
 #   from flask_cors import CORS
-#   from .extensions import db, migrate, scheduler
+#   from .extensions import db, migrate
 #   from config import config
 #
 # FUNCTION: create_app(config_name="default") -> Flask app
@@ -24,7 +24,7 @@
 #   STEP 3 — Import ALL models so Flask-Migrate can discover them for migrations.
 #       If you skip importing a model here, flask db migrate won't see it.
 #       Import every module from app/models/:
-#           from .models import company, query, accuracy, crawl, content, competitor, source, ethics
+#           from .models import company, auth, run_history, query, accuracy, crawl, content, competitor, source, ethics
 #
 #   STEP 4 — Register all blueprints with URL prefixes:
 #       dashboard_bp    → /api/dashboard
@@ -33,19 +33,17 @@
 #       competitors_bp  → /api/competitors
 #       actions_bp      → /api/actions
 #       crawl_bp        → /api/crawl
-#       query_tester_bp → /api/query
-#       ethics_bp       → /api/ethics        (for EthicsFlag endpoints)
+#       query_bp        → /api/query
+#       auth_bp         → /api/auth
+#       runs_bp         → /api/runs
+#       history_bp      → /api/history
+#       ethics_bp       → /api/ethics
 #
-#   STEP 5 — Register background jobs with APScheduler:
-#       Import job functions from app/jobs/:
-#           from .jobs.daily_queries import run_daily_queries
-#           from .jobs.weekly_crawl import run_weekly_crawl
-#           from .jobs.score_updater import run_score_updater
-#       Add jobs:
-#           scheduler.add_job(run_daily_queries, "interval", hours=24, id="daily_queries")
-#           scheduler.add_job(run_weekly_crawl,  "interval", weeks=1,  id="weekly_crawl")
-#       Start scheduler only if not already running:
-#           if not scheduler.running: scheduler.start()
+#   STEP 5 — Manual background task model (NO scheduler):
+#       - Work is triggered only when authenticated user clicks Start in frontend.
+#       - Trigger endpoints create run records with status=queued.
+#       - A lightweight async executor/thread worker picks queued runs.
+#       - No daily/weekly global automation is configured in app startup.
 #
 #   STEP 6 — Return the configured app instance
 #       return app

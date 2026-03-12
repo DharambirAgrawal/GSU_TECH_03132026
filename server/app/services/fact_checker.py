@@ -19,7 +19,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Main entry point. Runs the full fact-check pipeline for one QueryRun.
-#   Called by daily_queries.py after each query run completes.
+#   Called by run_orchestrator after each query run completes.
 #
 # STEPS:
 #   1. Load QueryRun from db (needs raw_response and company)

@@ -1,7 +1,7 @@
 # app/services/query_runner.py
 # -----------------------------------------
 # Service: Sends queries to LLM platforms and extracts brand visibility data.
-# Called by daily_queries.py job and the query_tester route.
+# Called by run_orchestrator batch worker and the query_tester route.
 #
 # IMPORTS NEEDED:
 #   from app.utils.llm_clients import get_chatgpt_response, get_gemini_response
@@ -17,7 +17,7 @@
 # -----------------------------------------------------------
 # PURPOSE:
 #   Runs one QueryTemplate against all 4 LLM platforms.
-#   Creates one QueryRun per platform. Called by daily_queries.py.
+#   Creates one QueryRun per platform for an active manual batch.
 #
 # STEPS:
 #   1. Load QueryTemplate and its associated Company from db

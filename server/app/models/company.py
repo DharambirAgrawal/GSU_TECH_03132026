@@ -19,9 +19,20 @@ class Company(db.Model):
     slug                = db.Column(db.String(50), unique=True, nullable=False)
     # e.g. "capital_one", "home_depot", "dell"
 
-    industry_type       = db.Column(db.Enum(IndustryType), nullable=False)
+    industry_type       = db.Column(db.Enum(IndustryType), nullable=True)
     primary_domain      = db.Column(db.String(255), nullable=False)
     # e.g. "https://www.homedepot.com"
+
+    about_company       = db.Column(db.Text)
+    # Short profile entered at registration. Used to personalize query suggestions.
+
+    approved_email_domain = db.Column(db.String(255))
+    # Canonical company login domain used for magic-link auth.
+    # Example: "amazon.com" allows anyone with *@amazon.com to sign in.
+
+    registration_status = db.Column(db.String(30), default="approved")
+    # For now auto-approved at registration as requested.
+    # Future values: pending_review, approved, rejected, suspended.
 
     logo_url            = db.Column(db.String(500))
 
@@ -53,6 +64,9 @@ class Company(db.Model):
     competitors     = db.relationship("Competitor",      back_populates="company", cascade="all, delete-orphan")
     content_fixes   = db.relationship("ContentFix",      back_populates="company", cascade="all, delete-orphan")
     ethics_flags    = db.relationship("EthicsFlag",      back_populates="company", cascade="all, delete-orphan")
+    users           = db.relationship("CompanyUser",     back_populates="company", cascade="all, delete-orphan")
+    allowed_domains = db.relationship("CompanyDomain",   back_populates="company", cascade="all, delete-orphan")
+    query_batches   = db.relationship("QueryBatchRun",   back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Company {self.name}>"
@@ -62,8 +76,11 @@ class Company(db.Model):
             "id":                   self.id,
             "name":                 self.name,
             "slug":                 self.slug,
-            "industry_type":        self.industry_type.value,
+            "industry_type":        self.industry_type.value if self.industry_type else None,
             "primary_domain":       self.primary_domain,
+            "about_company":        self.about_company,
+            "approved_email_domain": self.approved_email_domain,
+            "registration_status":  self.registration_status,
             "logo_url":             self.logo_url,
             "ai_visibility_score":  self.ai_visibility_score,
             "accuracy_score":       self.accuracy_score,
@@ -100,13 +117,16 @@ class CompanyConfig(db.Model):
     # and auto-alerts to legal when compliance_risk errors are found.
 
     alert_email            = db.Column(db.String(255))
-    # Where to send compliance alerts and weekly summary emails.
+    # Where to send compliance alerts and operational notifications.
 
-    query_frequency_hours  = db.Column(db.Integer, default=24)
-    # How often to run query batches. Default 24 hrs. Can be lowered to 12.
+    default_query_count    = db.Column(db.Integer, default=50)
+    # Default number of prompts suggested in the frontend run modal.
 
-    crawl_frequency_days   = db.Column(db.Integer, default=7)
-    # How often to crawl the website. Default 7 days.
+    max_query_count        = db.Column(db.Integer, default=100)
+    # Safety cap for one manual run request to avoid accidental overload.
+
+    auto_approve_domain_logins = db.Column(db.Boolean, default=True)
+    # If True, any user with approved company domain can receive magic links.
 
     created_at             = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at             = db.Column(db.DateTime, onupdate=lambda: datetime.now(timezone.utc))

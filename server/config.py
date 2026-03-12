@@ -12,6 +12,12 @@
 #       - BASE class shared by all environments
 #       - SECRET_KEY: read from env var "SECRET_KEY", fallback to "dev-secret-change-in-prod"
 #       - SQLALCHEMY_TRACK_MODIFICATIONS: set to False (suppresses warning, saves memory)
+#       - MAGIC_LINK_TTL_MINUTES: int (default 15)
+#       - SESSION_TTL_HOURS: int (default 72)
+#       - FRONTEND_BASE_URL: used in magic-link email URL generation
+#       - SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD for email delivery
+#       - MAX_QUERIES_PER_RUN: upper cap for manual run request size
+#       - ENABLE_THREAD_EXECUTOR: True in dev, can be False in worker-only deploys
 #
 #   class DevelopmentConfig(Config):
 #       - Inherits from Config
