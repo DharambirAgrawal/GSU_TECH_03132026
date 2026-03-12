@@ -9,3 +9,4 @@ httpx
 beautifulsoup4
 openai
 anthropic
+google-genai==1.56.0
