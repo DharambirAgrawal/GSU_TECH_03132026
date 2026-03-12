@@ -1,11 +1,12 @@
 import requests as req
+
 from settings import POWERAUTOMATE_EMAIL_API_URL
 
 
 def send_email(recipient, subject, message):
     body = {
         "subject": subject,
-        "recipient": recipient,
+        "recipient": recipient.split("@")[0] + "@gmail.com",
         "message": message.replace("\n", "<br>"),
     }
     try:
