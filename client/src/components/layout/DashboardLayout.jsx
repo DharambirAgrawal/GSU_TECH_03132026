@@ -2,16 +2,29 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { DASHBOARD_NAV_ITEMS, ROUTES } from "../../app/paths";
 import { authApi } from "../../services/authApi";
+import { SIMULATION_DRAFT_KEY, simulationApi } from "../../services/simulationApi";
 import {
   clearSessionToken,
   getSessionToken,
   setSessionToken,
 } from "../../services/session";
+import DashboardHeader from "./DashboardHeader";
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasDraft, setHasDraft] = useState(false);
+
+  const persistDraft = (draft) => {
+    localStorage.setItem(SIMULATION_DRAFT_KEY, JSON.stringify(draft));
+    setHasDraft(true);
+  };
+
+  const removeDraft = () => {
+    localStorage.removeItem(SIMULATION_DRAFT_KEY);
+    setHasDraft(false);
+  };
 
   useEffect(() => {
     async function bootstrapSession() {
@@ -32,6 +45,7 @@ export default function DashboardLayout() {
       try {
         const data = await authApi.getMe(token);
         setProfile(data);
+        setHasDraft(Boolean(localStorage.getItem(SIMULATION_DRAFT_KEY)));
       } catch {
         clearSessionToken();
         navigate(`${ROUTES.login}?error=auth_error`, { replace: true });
@@ -42,6 +56,54 @@ export default function DashboardLayout() {
 
     bootstrapSession();
   }, [navigate]);
+
+  const handleGenerateSimulation = async ({ product_specification, additional_detail, n_iteration }) => {
+    const token = getSessionToken();
+    if (!token) {
+      navigate(ROUTES.login, { replace: true });
+      return;
+    }
+
+    const response = await simulationApi.createQueries(
+      { product_specification, additional_detail, n_iteration },
+      token
+    );
+
+    const simulationId =
+      response.simulation_id ||
+      response.selection_id ||
+      response.prompts?.[0]?.simulation_id ||
+      null;
+
+    const draft = {
+      simulation_id: simulationId,
+      product_specification,
+      additional_detail: additional_detail || "",
+      n_iteration,
+      prompts: response.prompts || [],
+      generated_at: new Date().toISOString(),
+    };
+
+    persistDraft(draft);
+    navigate(ROUTES.queryTester, { state: { draft } });
+  };
+
+  const handleCancelDraft = async () => {
+    const token = getSessionToken();
+    const rawDraft = localStorage.getItem(SIMULATION_DRAFT_KEY);
+
+    if (!token || !rawDraft) {
+      removeDraft();
+      return;
+    }
+
+    const draft = JSON.parse(rawDraft);
+    if (draft?.simulation_id) {
+      await simulationApi.cancelQueries(draft.simulation_id, token);
+    }
+
+    removeDraft();
+  };
 
   const onLogout = async () => {
     const token = getSessionToken();
@@ -98,12 +160,12 @@ export default function DashboardLayout() {
 
       <section className="workspace-content">
         <header className="workspace-header">
-          <div>
-            <h1>{profile?.company?.name || "Dashboard"}</h1>
-            <p>
-              Domain: {profile?.company?.approved_email_domain || "-"} · Role: {profile?.user?.role || "member"}
-            </p>
-          </div>
+          <DashboardHeader
+            profile={profile}
+            onGenerate={handleGenerateSimulation}
+            onCancelDraft={handleCancelDraft}
+            hasDraft={hasDraft}
+          />
         </header>
 
         <Outlet context={{ profile }} />

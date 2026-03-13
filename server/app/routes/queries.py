@@ -154,9 +154,11 @@ def create_queries():
         jsonify(
             {
                 "success": True,
+                "simulation_id": simulation.id,
                 "prompts": [
                     {
                         "id": p.id,
+                        "simulation_id": p.simulation_id,
                         "prompt_order": p.prompt_order,
                         "text": p.text,
                     }

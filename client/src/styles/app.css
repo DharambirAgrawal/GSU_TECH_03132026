@@ -422,6 +422,66 @@
   color: var(--color-text-muted);
 }
 
+.workspace-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 30;
+  padding: 16px;
+}
+
+.modal {
+  width: min(100%, 520px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+}
+
+.simulation-modal {
+  display: grid;
+  gap: 12px;
+}
+
+.simulation-modal label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.simulation-modal input,
+.simulation-modal textarea {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.simulation-modal textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .page-card {
   width: 100%;
 }
@@ -435,6 +495,46 @@
   font-size: 12px;
   color: var(--color-primary-700);
   background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+}
+
+.dashboard-overview-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-list {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.query-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.query-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-primary) 4%);
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.query-index {
+  color: var(--color-primary-700);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.query-text {
+  color: var(--color-text);
+  font-size: 14px;
 }
 
 .stats-grid {
@@ -500,6 +600,15 @@
   .dashboard-card,
   .page-card {
     padding: 20px;
+  }
+
+  .workspace-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .modal-actions {
+    flex-direction: column;
   }
 }
 
