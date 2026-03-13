@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
+from pprint import pprint
 
 _MARKDOWN_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^)\s]+)\)")
 _URL_RE = re.compile(r"https?://[^\s)\]\[\"'>]+")
@@ -143,3 +145,19 @@ def parse_links_with_context(text: str) -> list[tuple[str, str]]:
 def parse_chatgpt_links(text: str) -> list[tuple[str, str]]:
     """Compatibility alias for existing callers."""
     return parse_chatgpt_links_with_description(text)
+
+
+if __name__ == "__main__":
+    fixture_path = Path(__file__).resolve().parents[3] / "example_hallucination.txt"
+    fixture_text = fixture_path.read_text(encoding="utf-8")
+
+    print("ChatGPT parser (first 5):")
+    pprint(parse_chatgpt_links_with_description(fixture_text)[:5])
+    print()
+
+    print("Gemini parser (first 5):")
+    pprint(parse_gemini_links_with_description(fixture_text)[:5])
+    print()
+
+    print("Dispatcher parser for 'gpt-4o' (first 5):")
+    pprint(parse_links_for_model(fixture_text, "gpt-4o")[:5])
