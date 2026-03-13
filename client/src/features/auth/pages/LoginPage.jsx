@@ -4,6 +4,7 @@ import AuthCard from "../../../components/common/AuthCard";
 import { ROUTES } from "../../../app/paths";
 import { authApi } from "../../../services/authApi";
 import { getSessionToken, setSessionToken } from "../../../services/session";
+import vigilLogo from "../../../assets/vigil_logopurple_128px.png";
 
 export default function LoginPage() {
   const location = useLocation();
@@ -64,16 +65,23 @@ export default function LoginPage() {
 
   return (
     <div className="login-page-outer">
-      
+      <button 
+        type="button" 
+        className="back-btn back-btn-centered" 
+        onClick={() => navigate(ROUTES.home)}
+      >
+        ← Back to Home
+      </button>
+
       <div className="login-logo-outer">
-        <div className="login-logo">Vigil</div>
+        <img src={vigilLogo} alt="Vigil Logo" className="login-logo-img" />
       </div>
+
       <AuthCard
-        title="Login with magic link" style={{ textAlign: "center" }}
-        subtitle="Use your company email. We’ll send a one-time secure login link."
+        title="Login with magic link"
+        subtitle="Use your company email. We'll send a one-time secure login link."
         hideTitle
       >
-
         <div className="form-section">
           <h3 className="form-section-title">Request Magic Link</h3>
           <form className="form" onSubmit={onSubmitMagicLink} style={{ marginBottom: 24 }}>
@@ -82,7 +90,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                placeholder="dev.dharambir@amazon.com"
+                placeholder="you@company.com"
                 onChange={(event) => setEmail(event.target.value)}
                 required
               />
@@ -92,32 +100,15 @@ export default function LoginPage() {
             {error ? <div className="alert error">{error}</div> : null}
             <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
-                <span className="spinner" style={{ marginRight: 8 }}></span>
+                <span className="spinner" style={{ alignItems: 'center' }}></span>
               ) : null}
               {isSubmitting ? "Sending..." : "Send Magic Link"}
             </button>
           </form>
         </div>
-        <div className="form-divider">
-          <span>or</span>
-          <hr />
-        </div>
-        <div className="form-section">
-          <h3 className="form-section-title">Use Session Token</h3>
-          <form className="form token-form" onSubmit={onSubmitToken}>
-            <label>
-              Already have session token?
-              <input
-                value={sessionToken}
-                placeholder="Paste token and continue"
-                onChange={(event) => setSessionTokenInput(event.target.value)}
-              />
-            </label>
-            <button className="btn btn-secondary" type="submit">Go to Dashboard</button>
-          </form>
-        </div>
+
         <p className="route-cta">
-          Need to register first? <Link to={ROUTES.register}>Register company</Link>
+          Need to register first? <Link to={ROUTES.register} style={{ color: '#8219a2' }}>Register company</Link>
         </p>
       </AuthCard>
     </div>

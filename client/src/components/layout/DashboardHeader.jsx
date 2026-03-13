@@ -1,44 +1,150 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+	CalendarClock,
+	PlayCircle,
+	Sparkles,
+	X,
+} from "lucide-react";
 
-export default function DashboardHeader({ profile, onGenerate, onCancelDraft, hasDraft }) {
+import {
+	formatDateTime,
+	formatRelativeTime,
+} from "../../features/dashboard/analyticsUtils";
+
+export default function DashboardHeader({
+	profile,
+	analytics,
+	onGenerate,
+	onStartDraft,
+	onCancelDraft,
+	hasDraft,
+	draft,
+}) {
+	const companyName = profile?.company?.name || "Dashboard";
+	const approvedDomain = profile?.company?.approved_email_domain || "No approved domain";
+	const userRole = profile?.user?.role || "member";
+	const primaryInputRef = useRef(null);
 	const [isModalOpen, setIsModalOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
+	const [successMessage, setSuccessMessage] = useState("");
 	const [form, setForm] = useState({
 		product_specification: "",
 		additional_detail: "",
 		n_iteration: 10,
 	});
 
+	const draftPromptCount = draft?.prompts?.length || 0;
+	const lastSimulationTimestamp =
+		analytics?.summary?.last_simulation_completed_at ||
+		analytics?.activity?.[0]?.timestamp ||
+		null;
+	const lastSimulationStatus = analytics?.summary?.last_simulation_status || null;
+	const hasBackendSimulation = Boolean(lastSimulationTimestamp || lastSimulationStatus);
+	const lastSimulationLabel = lastSimulationTimestamp
+		? formatDateTime(lastSimulationTimestamp)
+		: lastSimulationStatus
+			? `Status: ${lastSimulationStatus}`
+			: "No simulation yet";
+	const lastSimulationRelative = lastSimulationTimestamp
+		? formatRelativeTime(lastSimulationTimestamp)
+		: hasBackendSimulation
+			? "Simulation data synced from analytics"
+			: "Ready for your first run";
+	const isReviewMode = hasDraft && draft?.prompts?.length;
+	const trimmedProductSpec = form.product_specification.trim();
+	const canGenerate = Boolean(trimmedProductSpec) && Number(form.n_iteration) >= 1 && Number(form.n_iteration) <= 100;
+
+	useEffect(() => {
+		if (!isModalOpen) {
+			return undefined;
+		}
+
+		const previousOverflow = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+
+		const handleKeyDown = (event) => {
+			if (event.key === "Escape" && !isSubmitting) {
+				setIsModalOpen(false);
+			}
+		};
+
+		window.addEventListener("keydown", handleKeyDown);
+		window.setTimeout(() => {
+			primaryInputRef.current?.focus();
+		}, 20);
+
+		return () => {
+			document.body.style.overflow = previousOverflow;
+			window.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [isModalOpen, isSubmitting, isReviewMode]);
+
 	const openModal = () => {
 		setError("");
+		setSuccessMessage("");
 		setIsModalOpen(true);
 	};
 
 	const closeModal = () => {
 		if (isSubmitting) return;
+		setError("");
+		setSuccessMessage("");
 		setIsModalOpen(false);
 	};
 
 	const updateField = (event) => {
 		const { name, value } = event.target;
-		setForm((prev) => ({ ...prev, [name]: name === "n_iteration" ? Number(value) : value }));
+		setForm((prev) => ({ 
+			...prev, 
+			[name]: name === "n_iteration" ? value : value 
+		}));
 	};
 
 	const handleGenerate = async (event) => {
 		event.preventDefault();
 		setError("");
+		setSuccessMessage("");
+
+		if (!canGenerate) {
+			setError("Add a product specification and choose between 1 and 100 iterations.");
+			return;
+		}
+
 		setIsSubmitting(true);
 
 		try {
-			await onGenerate({
-				product_specification: form.product_specification.trim(),
+			const result = await onGenerate({
+				product_specification: trimmedProductSpec,
 				additional_detail: form.additional_detail.trim() || undefined,
-				n_iteration: Number(form.n_iteration),
+				n_iteration: Number(form.n_iteration) || 10,
 			});
-			setIsModalOpen(false);
+			setSuccessMessage(
+				`Prompts generated (${result?.prompts_count || 0}). Review and click Start Simulation.`
+			);
 		} catch (requestError) {
 			setError(requestError.message || "Failed to create simulation.");
+		} finally {
+			setIsSubmitting(false);
+		}
+	};
+
+	const handleStart = async () => {
+		setError("");
+		setSuccessMessage("");
+		setIsSubmitting(true);
+		try {
+			const result = await onStartDraft();
+			setSuccessMessage(
+				`Simulation started (${result?.mode || "processing"}). ID: ${result?.simulation_id || "-"}`
+			);
+			setTimeout(() => {
+				setIsModalOpen(false);
+				setSuccessMessage("");
+			}, 900);
+		} catch (requestError) {
+			setError(requestError.message || "Failed to start simulation.");
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -64,72 +170,156 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 
 	return (
 		<>
-			<div className="workspace-header-row">
-				<div>
-					<h1>{profile?.company?.name || "Dashboard"}</h1>
+			<div className="dashboard-command">
+				<div className="dashboard-command-copy">
+					<div className="dashboard-eyebrow">Executive command center</div>
+					<h1>{companyName}</h1>
 					<p>
-						Domain: {profile?.company?.approved_email_domain || "-"} · Role: {profile?.user?.role || "member"}
+						Monitor AI visibility, accuracy, competitors, and operational issues from one place.
 					</p>
+					<div className="dashboard-chip-row">
+						<span className="dashboard-chip">Domain · {approvedDomain}</span>
+						<span className="dashboard-chip">Role · {userRole}</span>
+						<span className="dashboard-chip">Draft prompts · {draftPromptCount}</span>
+					</div>
 				</div>
-				<button type="button" className="btn btn-primary" onClick={openModal}>
-					Create Simulation
-				</button>
+
+				<div className="dashboard-command-panel">
+					<div className="dashboard-status-card">
+						<div className="dashboard-status-icon">
+							<CalendarClock size={18} />
+						</div>
+						<div>
+							<div className="dashboard-status-label">Last simulation</div>
+							<div className="dashboard-status-value">{lastSimulationLabel}</div>
+								<div className="dashboard-status-meta">
+									{lastSimulationStatus ? `Status: ${lastSimulationStatus} · ` : ""}
+									{lastSimulationRelative}
+								</div>
+						</div>
+					</div>
+
+					<div className="header-actions header-actions-row">
+						<button type="button" className="btn btn-primary btn-pulse" onClick={openModal}>
+							<Sparkles size={16} />
+							{isReviewMode ? "Review Simulation Draft" : "Create Simulation"}
+						</button>
+						<p className="last-simulation-text">
+							{hasDraft ? "Generated prompts are ready for review." : "Run a new simulation to refresh insights."}
+						</p>
+					</div>
+				</div>
 			</div>
 
-			{isModalOpen ? (
-				<div className="modal-backdrop" onClick={closeModal}>
-					<form className="modal simulation-modal" onSubmit={handleGenerate} onClick={(event) => event.stopPropagation()}>
-						<h2>Create Simulation</h2>
-						<p>Enter required fields and generate prompts for a simulation draft.</p>
+			{isModalOpen
+				? createPortal(
+					<div className="modal-backdrop simulation-modal-backdrop" onClick={closeModal}>
+						<div
+							className="modal simulation-modal simulation-modal-shell"
+							onClick={(event) => event.stopPropagation()}
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="simulation-modal-title"
+						>
+							<div className="simulation-modal-toolbar">
+								<div>
+									<h2 id="simulation-modal-title">{isReviewMode ? "Review Simulation Draft" : "Create Simulation"}</h2>
+									<p>
+										{isReviewMode
+											? "Review prompts and start simulation."
+											: "Add details and generate prompts for simulation."}
+									</p>
+								</div>
+								<button type="button" className="modal-icon-button" onClick={closeModal} disabled={isSubmitting} aria-label="Close simulation modal">
+									<X size={18} />
+								</button>
+							</div>
 
-						<label>
-							Product specification
-							<input
-								name="product_specification"
-								value={form.product_specification}
-								onChange={updateField}
-								placeholder="Laptop"
-								required
-							/>
-						</label>
+							{isReviewMode ? (
+								<>
+									<div className="simulation-simple-info">{draftPromptCount} prompts generated</div>
 
-						<label>
-							Additional detail (optional)
-							<textarea
-								name="additional_detail"
-								value={form.additional_detail}
-								onChange={updateField}
-								placeholder="Target budget, audience, and use case"
-								rows={3}
-							/>
-						</label>
+									<div className="modal-scroll-region">
+										<ol className="prompt-review-list">
+											{draft.prompts.map((prompt, idx) => (
+												<li key={prompt.id || idx} className="prompt-review-item">
+													<span className="prompt-review-index">Prompt {idx + 1}</span>
+													<span>{prompt.text}</span>
+												</li>
+											))}
+										</ol>
+									</div>
 
-						<label>
-							Number of iterations
-							<input
-								name="n_iteration"
-								type="number"
-								min={1}
-								max={100}
-								value={form.n_iteration}
-								onChange={updateField}
-								required
-							/>
-						</label>
+									{error ? <div className="alert error">{error}</div> : null}
+									{successMessage ? <div className="alert success">{successMessage}</div> : null}
 
-						{error ? <div className="alert error">{error}</div> : null}
+									<div className="modal-actions">
+										<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} disabled={isSubmitting}>
+											Discard Draft
+										</button>
+										<button type="button" className="btn btn-primary" onClick={handleStart} disabled={isSubmitting}>
+											<PlayCircle size={16} />
+											{isSubmitting ? "Starting..." : "Start Simulation"}
+										</button>
+									</div>
+								</>
+							) : (
+								<form onSubmit={handleGenerate}>
+									<label>
+										Product specification
+										<input
+											ref={primaryInputRef}
+											name="product_specification"
+											value={form.product_specification}
+											onChange={updateField}
+											placeholder="Laptop, running shoes, CRM platform..."
+											required
+										/>
+									</label>
 
-						<div className="modal-actions">
-							<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} disabled={isSubmitting}>
-								Cancel
-							</button>
-							<button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-								{isSubmitting ? "Generating..." : "Generate"}
-							</button>
+									<label>
+										Additional details (optional)
+										<textarea
+											name="additional_detail"
+											value={form.additional_detail}
+											onChange={updateField}
+											placeholder="Audience, region, pricing segment, sales problem, or use case"
+											rows={3}
+										/>
+									</label>
+
+									<label>
+										Number of iterations
+										<input
+											name="n_iteration"
+											type="number"
+											min={1}
+											max={100}
+											value={form.n_iteration}
+											onChange={updateField}
+											required
+										/>
+									</label>
+
+									{error ? <div className="alert error">{error}</div> : null}
+									{successMessage ? <div className="alert success">{successMessage}</div> : null}
+
+									<div className="modal-actions">
+										<button type="button" className="btn btn-secondary" onClick={closeModal} disabled={isSubmitting}>
+											Close
+										</button>
+										<button type="submit" className="btn btn-primary" disabled={isSubmitting || !canGenerate}>
+											<Sparkles size={16} />
+											{isSubmitting ? "Generating..." : "Generate Prompts"}
+										</button>
+									</div>
+								</form>
+							)}
 						</div>
-					</form>
-				</div>
-			) : null}
+					</div>,
+					document.body
+				)
+				: null}
 		</>
 	);
 }

@@ -3,7 +3,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 import anthropic
 import httpx
@@ -63,6 +63,7 @@ class LLMResponse:
     sources: list = field(default_factory=list)
     platform: str = ""
     search_enabled: bool = False
+    metadata: dict = field(default_factory=dict)
     raw_response: object = None
 
     def __str__(self) -> str:
@@ -172,6 +173,95 @@ def _parse_sources_from_text(text: str) -> tuple[str, list[dict]]:
     return answer, sources
 
 
+def _extract_openai_grounded_response(response: object) -> tuple[str, list[dict], dict]:
+    """Extract answer text, ranked sources, and grounding metadata from Responses API."""
+    content_parts: list[str] = []
+    sources: list[dict] = []
+    seen_urls: set[str] = set()
+    citations: list[dict] = []
+    output_items: list[dict] = []
+    web_search_calls: list[dict] = []
+
+    # SDK objects expose `model_dump`; fallback to object attributes when unavailable.
+    response_dict: dict[str, Any] = {}
+    try:
+        if hasattr(response, "model_dump"):
+            response_dict = response.model_dump()
+    except Exception:
+        response_dict = {}
+
+    output = getattr(response, "output", []) or []
+    for item in output:
+        item_type = getattr(item, "type", "unknown")
+        output_items.append(
+            {
+                "id": getattr(item, "id", None),
+                "type": item_type,
+                "status": getattr(item, "status", None),
+            }
+        )
+
+        # Capture web search call payloads when present.
+        if item_type in {"web_search_call", "tool_call"}:
+            call = {
+                "id": getattr(item, "id", None),
+                "type": item_type,
+                "status": getattr(item, "status", None),
+            }
+            for attr in ["query", "action", "arguments", "name"]:
+                if hasattr(item, attr):
+                    call[attr] = getattr(item, attr)
+            web_search_calls.append(call)
+
+        if item_type != "message":
+            continue
+
+        for block in getattr(item, "content", []) or []:
+            if getattr(block, "type", None) != "output_text":
+                continue
+
+            block_text = getattr(block, "text", "") or ""
+            if block_text:
+                content_parts.append(block_text)
+
+            for ann in getattr(block, "annotations", []) or []:
+                ann_type = getattr(ann, "type", None)
+                citation = {
+                    "type": ann_type,
+                    "title": getattr(ann, "title", None),
+                    "url": getattr(ann, "url", None),
+                    "start_index": getattr(ann, "start_index", None),
+                    "end_index": getattr(ann, "end_index", None),
+                }
+                citations.append(citation)
+
+                url = citation.get("url")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    sources.append(
+                        {
+                            "rank": len(sources) + 1,
+                            "title": citation.get("title") or "Untitled",
+                            "url": url,
+                            "snippet": "",
+                        }
+                    )
+
+    metadata = {
+        "response_id": getattr(response, "id", None),
+        "model": getattr(response, "model", None),
+        "status": getattr(response, "status", None),
+        "usage": getattr(response, "usage", None),
+        "output_items": output_items,
+        "web_search_calls": web_search_calls,
+        "citations": citations,
+        "raw_dict": response_dict,
+    }
+
+    content = "\n".join(part for part in content_parts if part).strip()
+    return content, sources, metadata
+
+
 # ───────────────────────────────────────────
 # FUNCTION: get_chatgpt_response
 # ───────────────────────────────────────────
@@ -186,10 +276,10 @@ def get_chatgpt_response(
     Sends a query to OpenAI GPT-4o and returns the response.
 
     When search=True:
-      - Uses the 'gpt-4o' model with web_search_options to enable
-        native search grounding (available via the Responses API).
-      - Falls back to prompt-based search if the responses API is unavailable.
-      - Returns ranked sources/citations alongside the answer.
+            - Uses the OpenAI Responses API with native web search grounding.
+            - Extracts all available grounding metadata: output items,
+                web search call payloads, citations, URLs, and usage.
+            - Falls back to prompt-based search if the grounded call fails.
 
     When search=False:
       - Standard completion with no web search.
@@ -210,10 +300,7 @@ def get_chatgpt_response(
         client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
         if search:
-            # ── Attempt 1: Use OpenAI's Responses API with native web search ──
-            # The Responses API (client.responses.create) supports web_search_options
-            # which grounds the model's answer in real-time web results and returns
-            # inline citations with URLs.
+            # ── Attempt 1: OpenAI Responses API with native web search grounding ──
             try:
                 response = client.responses.create(
                     model="gpt-4o",
@@ -221,49 +308,14 @@ def get_chatgpt_response(
                     tools=[{"type": "web_search_preview"}],
                 )
 
-                # Extract the text content
-                content = ""
-                sources = []
-                seen_urls = set()
-                rank_counter = 1
-
-                for item in response.output:
-                    if item.type == "message":
-                        for content_block in item.content:
-                            if content_block.type == "output_text":
-                                content = content_block.text
-
-                                # Extract annotations (citations) from the response
-                                if (
-                                    hasattr(content_block, "annotations")
-                                    and content_block.annotations
-                                ):
-                                    for annotation in content_block.annotations:
-                                        if (
-                                            hasattr(annotation, "url")
-                                            and annotation.url
-                                        ):
-                                            url = annotation.url
-                                            if url not in seen_urls:
-                                                seen_urls.add(url)
-                                                sources.append(
-                                                    {
-                                                        "rank": rank_counter,
-                                                        "title": getattr(
-                                                            annotation, "title", ""
-                                                        )
-                                                        or "Untitled",
-                                                        "url": url,
-                                                        "snippet": "",
-                                                    }
-                                                )
-                                                rank_counter += 1
+                content, sources, metadata = _extract_openai_grounded_response(response)
 
                 return LLMResponse(
                     content=content,
                     sources=sources,
                     platform="chatgpt",
                     search_enabled=True,
+                    metadata=metadata,
                     raw_response=response,
                 )
 
@@ -293,6 +345,7 @@ def get_chatgpt_response(
                 sources=sources,
                 platform="chatgpt",
                 search_enabled=True,
+                metadata={"fallback": "prompt_based_search"},
                 raw_response=response,
             )
 
@@ -313,6 +366,10 @@ def get_chatgpt_response(
                 sources=[],
                 platform="chatgpt",
                 search_enabled=False,
+                metadata={
+                    "model": "gpt-4o",
+                    "usage": getattr(response, "usage", None),
+                },
                 raw_response=response,
             )
 
@@ -639,9 +696,7 @@ def get_gemini_response(
         LLMClientError: For any other API error.
     """
     try:
-        gemini_client = genai.Client(
-            api_key=(GEMINI_API_KEY := os.environ["GEMINI_API_KEY"])
-        )
+        gemini_client = genai.Client(api_key=(os.environ["GEMINI_API_KEY"]))
 
         def _extract_text(response_obj: object) -> str:
             text = getattr(response_obj, "text", None)
@@ -663,48 +718,77 @@ def get_gemini_response(
 
         if search:
             from google.genai import types
-            
+
             response = gemini_client.models.generate_content(
                 model=model_name,
                 contents=query,
                 config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are a helpful research assistant. "
+                        "Always respond in clean Markdown format. "
+                        "Use inline citations like [1], [2] etc. to reference sources. "
+                        "Use headers (##), bullet points, and bold text where appropriate. "
+                        "Do NOT output any HTML. Do NOT output raw URLs inline — only use citations."
+                    ),
                     tools=[{"google_search": {}}],
-                )
+                ),
             )
 
             raw_text = _extract_text(response)
             sources = []
-            
+            grounding_meta: dict = {}
+
             try:
                 candidate = response.candidates[0]
                 metadata = candidate.grounding_metadata
-                
-                if metadata and hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
-                    # Build snippets from supports if available
-                    snippet_map = {}
-                    if hasattr(metadata, 'grounding_supports') and metadata.grounding_supports:
+
+                if metadata:
+                    # Extract web_search_queries used (clean list, not HTML)
+                    web_search_queries = (
+                        getattr(metadata, "web_search_queries", None) or []
+                    )
+                    grounding_meta["web_search_queries"] = list(web_search_queries)
+
+                    # Build snippet map from grounding_supports
+                    snippet_map: dict[int, list[str]] = {}
+                    if (
+                        hasattr(metadata, "grounding_supports")
+                        and metadata.grounding_supports
+                    ):
                         for support in metadata.grounding_supports:
-                            if hasattr(support, 'segment') and hasattr(support.segment, 'text'):
-                                text = support.segment.text
-                                indices = getattr(support, 'grounding_chunk_indices', [])
-                                for idx in indices:
-                                    if idx not in snippet_map:
-                                        snippet_map[idx] = []
-                                    if text not in snippet_map[idx]:
-                                        snippet_map[idx].append(text)
-                                        
-                    for i, chunk in enumerate(metadata.grounding_chunks):
-                        if hasattr(chunk, 'web') and chunk.web:
-                            snippet_list = snippet_map.get(i, [])
-                            snippet_text = " ... ".join(snippet_list)
-                            
-                            sources.append({
-                                "rank": len(sources) + 1,
-                                "title": getattr(chunk.web, 'title', 'Untitled'),
-                                "url": getattr(chunk.web, 'uri', 'N/A'),
-                                "snippet": snippet_text
-                            })
-                            
+                            if hasattr(support, "segment") and hasattr(
+                                support.segment, "text"
+                            ):
+                                seg_text = support.segment.text
+                                for idx in (
+                                    getattr(support, "grounding_chunk_indices", [])
+                                    or []
+                                ):
+                                    snippet_map.setdefault(idx, [])
+                                    if seg_text not in snippet_map[idx]:
+                                        snippet_map[idx].append(seg_text)
+
+                    # Build sources from grounding_chunks
+                    if (
+                        hasattr(metadata, "grounding_chunks")
+                        and metadata.grounding_chunks
+                    ):
+                        for i, chunk in enumerate(metadata.grounding_chunks):
+                            if hasattr(chunk, "web") and chunk.web:
+                                snippet_parts = snippet_map.get(i, [])
+                                sources.append(
+                                    {
+                                        "rank": len(sources) + 1,
+                                        "title": getattr(
+                                            chunk.web, "title", "Untitled"
+                                        ),
+                                        "url": getattr(chunk.web, "uri", "N/A"),
+                                        "snippet": " ... ".join(snippet_parts),
+                                    }
+                                )
+
+                    grounding_meta["source_count"] = len(sources)
+
             except Exception as e:
                 logger.warning(f"Error extracting Gemini grounding metadata: {e}")
 
@@ -713,6 +797,7 @@ def get_gemini_response(
                 sources=sources,
                 platform="gemini",
                 search_enabled=True,
+                metadata=grounding_meta,
                 raw_response=response,
             )
 
@@ -830,7 +915,7 @@ def query_all_llms(
 if __name__ == "__main__":
     print(
         get_gemini_response(
-            "please give me hp laptops below 500 dollars that have 8gb ram and 512gb storage space",
-            True,
+            "please give me about 20 laptop choices below 500 dollars that have 16gb ram and 512gb storage space",
+            search=True,
         )
     )

@@ -110,7 +110,7 @@ export default function QueryTesterPage() {
     return (
       <section className="page-card">
         <h2>Query Tester</h2>
-        <p>No simulation draft found. Use “Create Simulation” from dashboard header.</p>
+        <p>No simulation draft found. Use "Create Simulation" from dashboard header.</p>
       </section>
     );
   }
@@ -139,7 +139,7 @@ export default function QueryTesterPage() {
       <div className="query-list-scroller">
         <div className="query-list">
           {visiblePrompts.map((prompt, index) => (
-            <article className="query-item" key={prompt.id || `${index}-${prompt.text}`}>
+            <article className="query-item" key={prompt.id || index}>
               <div className="query-index">#{(prompt.prompt_order ?? index) + 1}</div>
               <div className="query-text">{prompt.text}</div>
             </article>
@@ -154,7 +154,7 @@ export default function QueryTesterPage() {
           onClick={() => setShowAllPrompts((prev) => !prev)}
           disabled={isActionLoading}
         >
-          {showAllPrompts ? "Show First 20" : `Show All ${prompts.length}`}
+          {showAllPrompts ? "Show First 20" : "Show All " + prompts.length}
         </button>
       ) : null}
 

@@ -66,12 +66,16 @@ def create_app(config_name: str = "default") -> Flask:
         # Step 4 — Register active blueprints.
         # --------------------------------------------------------------
         from .routes.auth import bp as auth_bp
+        from .routes.dashboard import bp as dashboard_bp
         from .routes.queries import bp as queries_bp
         from .routes.simulations import bp as simulations_bp
+        from .routes.metrics import bp as metrics_bp
 
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
+        app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
         app.register_blueprint(queries_bp, url_prefix="/api/agent")
         app.register_blueprint(simulations_bp, url_prefix="/api/agents")
+        app.register_blueprint(metrics_bp, url_prefix="/api/metrics")
 
         # --------------------------------------------------------------
         # Step 5 — Health-check route (no auth needed)
