@@ -35,7 +35,7 @@ client/
 │   ├── pages/
 │   │   └── HomePage.jsx
 │   ├── services/
-│   │   ├── apiClient.js
+│   │   ├── .js
 │   │   ├── authApi.js
 │   │   └── session.js
 │   ├── styles/
@@ -53,6 +53,7 @@ client/
 - `/auth/verify` → Frontend token verification fallback
 
 Protected workspace routes:
+
 - `/dashboard`
 - `/runs`
 - `/visibility`
@@ -66,6 +67,7 @@ Protected workspace routes:
 ## Backend Mapping
 
 ### Auth APIs
+
 - `POST /api/auth/register-company`
 - `POST /api/auth/request-magic-link`
 - `POST /api/auth/verify-magic-link`
@@ -73,6 +75,7 @@ Protected workspace routes:
 - `POST /api/auth/logout`
 
 ### Feature APIs (scaffolded pages ready)
+
 - `/api/dashboard/*`
 - `/api/runs/*`
 - `/api/visibility/*`

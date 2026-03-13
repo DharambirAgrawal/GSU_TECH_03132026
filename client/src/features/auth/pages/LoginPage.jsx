@@ -63,46 +63,63 @@ export default function LoginPage() {
   };
 
   return (
-    <AuthCard
-      title="Login with magic link"
-      subtitle="Use your company email. We’ll send a one-time secure login link."
-    >
-      <form className="form" onSubmit={onSubmitMagicLink}>
-        <label>
-          Company email
-          <input
-            type="email"
-            value={email}
-            placeholder="dev.dharambir@amazon.com"
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </label>
+    <div className="login-page-outer">
+      
+      <div className="login-logo-outer">
+        <div className="login-logo">Vigil</div>
+      </div>
+      <AuthCard
+        title="Login with magic link" style={{ textAlign: "center" }}
+        subtitle="Use your company email. We’ll send a one-time secure login link."
+        hideTitle
+      >
 
-        {errorFromUrl ? <div className="alert error">{errorFromUrl}</div> : null}
-        {message ? <div className="alert success">{message}</div> : null}
-        {error ? <div className="alert error">{error}</div> : null}
-
-        <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Sending..." : "Send Magic Link"}
-        </button>
-      </form>
-
-      <form className="form token-form" onSubmit={onSubmitToken}>
-        <label>
-          Already have session token?
-          <input
-            value={sessionToken}
-            placeholder="Paste token and continue"
-            onChange={(event) => setSessionTokenInput(event.target.value)}
-          />
-        </label>
-        <button className="btn btn-secondary" type="submit">Go to Dashboard</button>
-      </form>
-
-      <p className="route-cta">
-        Need to register first? <Link to={ROUTES.register}>Register company</Link>
-      </p>
-    </AuthCard>
+        <div className="form-section">
+          <h3 className="form-section-title">Request Magic Link</h3>
+          <form className="form" onSubmit={onSubmitMagicLink} style={{ marginBottom: 24 }}>
+            <label>
+              Company Email
+              <input
+                type="email"
+                value={email}
+                placeholder="dev.dharambir@amazon.com"
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </label>
+            {errorFromUrl ? <div className="alert error">{errorFromUrl}</div> : null}
+            {message ? <div className="alert success">{message}</div> : null}
+            {error ? <div className="alert error">{error}</div> : null}
+            <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <span className="spinner" style={{ marginRight: 8 }}></span>
+              ) : null}
+              {isSubmitting ? "Sending..." : "Send Magic Link"}
+            </button>
+          </form>
+        </div>
+        <div className="form-divider">
+          <span>or</span>
+          <hr />
+        </div>
+        <div className="form-section">
+          <h3 className="form-section-title">Use Session Token</h3>
+          <form className="form token-form" onSubmit={onSubmitToken}>
+            <label>
+              Already have session token?
+              <input
+                value={sessionToken}
+                placeholder="Paste token and continue"
+                onChange={(event) => setSessionTokenInput(event.target.value)}
+              />
+            </label>
+            <button className="btn btn-secondary" type="submit">Go to Dashboard</button>
+          </form>
+        </div>
+        <p className="route-cta">
+          Need to register first? <Link to={ROUTES.register}>Register company</Link>
+        </p>
+      </AuthCard>
+    </div>
   );
 }
