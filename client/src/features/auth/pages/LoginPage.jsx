@@ -4,6 +4,7 @@ import AuthCard from "../../../components/common/AuthCard";
 import { ROUTES } from "../../../app/paths";
 import { authApi } from "../../../services/authApi";
 import { getSessionToken, setSessionToken } from "../../../services/session";
+import vigilLogo from "../../../assets/vigil_logopurple.png";
 
 export default function LoginPage() {
   const location = useLocation();
@@ -30,7 +31,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (getSessionToken()) {
-      navigate(ROUTES.dashboard, { replace: true });
+      navigate(ROUTES.login, { replace: true });
     }
   }, [navigate]);
 
@@ -66,7 +67,7 @@ export default function LoginPage() {
     <div className="login-page-outer">
       
       <div className="login-logo-outer">
-        <div className="login-logo">Vigil</div>
+        <img src={vigilLogo} alt="Vigil Logo" className="login-logo-img" />
       </div>
       <AuthCard
         title="Login with magic link" style={{ textAlign: "center" }}
@@ -98,24 +99,7 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-        <div className="form-divider">
-          <span>or</span>
-          <hr />
-        </div>
-        <div className="form-section">
-          <h3 className="form-section-title">Use Session Token</h3>
-          <form className="form token-form" onSubmit={onSubmitToken}>
-            <label>
-              Already have session token?
-              <input
-                value={sessionToken}
-                placeholder="Paste token and continue"
-                onChange={(event) => setSessionTokenInput(event.target.value)}
-              />
-            </label>
-            <button className="btn btn-secondary" type="submit">Go to Dashboard</button>
-          </form>
-        </div>
+        {/* <button className="btn btn-secondary" type="submit">Go to Dashboard</button> */}
         <p className="route-cta">
           Need to register first? <Link to={ROUTES.register}>Register company</Link>
         </p>
