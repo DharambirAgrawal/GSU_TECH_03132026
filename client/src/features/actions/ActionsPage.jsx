@@ -1,4 +1,5 @@
-import { AlertTriangle, ShieldAlert, Sparkles, Wrench } from "lucide-react";
+import { AlertTriangle, FileDown, ShieldAlert, Sparkles, Wrench } from "lucide-react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import {
@@ -9,9 +10,13 @@ import {
   startCase,
   truncateText,
 } from "../dashboard/analyticsUtils";
+import { getSessionToken } from "../../services/session";
+import { simulationApi } from "../../services/simulationApi";
 
 export default function ActionsPage() {
   const { analytics, analyticsError, isAnalyticsLoading } = useOutletContext();
+  const [activeDepartment, setActiveDepartment] = useState("");
+  const [pdfError, setPdfError] = useState("");
 
   if (isAnalyticsLoading) {
     return <section className="page-card"><p>Loading actions analytics...</p></section>;
@@ -34,6 +39,51 @@ export default function ActionsPage() {
   const topFailureReasons = safeArray(analytics?.actions?.top_failure_reasons);
   const topMitigations = safeArray(analytics?.actions?.top_mitigations);
   const severitySummary = buildSeveritySummary(errorBreakdown);
+  const latestSimulationId = analytics?.summary?.last_simulation_id || null;
+  const canDownloadReport = Boolean(latestSimulationId);
+  const isDownloading = Boolean(activeDepartment);
+
+  const downloadPdf = async (department) => {
+    const token = getSessionToken();
+    if (!token || !latestSimulationId) {
+      setPdfError("Run a simulation first, then try downloading a report.");
+      return;
+    }
+
+    setPdfError("");
+    setActiveDepartment(department);
+
+    try {
+      const payload = await simulationApi.generatePdfReport(
+        {
+          simulation_id: latestSimulationId,
+          company_department: department,
+        },
+        token
+      );
+
+      const binaryString = window.atob(payload.pdf_base64 || "");
+      const bytes = new Uint8Array(binaryString.length);
+      for (let index = 0; index < binaryString.length; index += 1) {
+        bytes[index] = binaryString.charCodeAt(index);
+      }
+
+      const blob = new Blob([bytes], { type: payload.content_type || "application/pdf" });
+      const fileName = payload.filename || `geo_report_${department}_${latestSimulationId}.pdf`;
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (requestError) {
+      setPdfError(requestError.message || "Failed to generate PDF report.");
+    } finally {
+      setActiveDepartment("");
+    }
+  };
 
   const actionPlan = [
     severitySummary.critical
@@ -56,6 +106,35 @@ export default function ActionsPage() {
           <p>
             This view translates the backend actions payload into a triage board: issue counts, severity mix, recurring failures, and recommended mitigations.
           </p>
+        </div>
+
+        <div className="report-download-panel">
+          <h3>Download PDF Reports</h3>
+          <p>Export simulation insights tailored for business and technical teams.</p>
+          <div className="report-download-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => downloadPdf("marketing")}
+              disabled={!canDownloadReport || isDownloading}
+            >
+              <FileDown size={16} />
+              {activeDepartment === "marketing" ? "Generating..." : "Marketing PDF"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => downloadPdf("engineering")}
+              disabled={!canDownloadReport || isDownloading}
+            >
+              <FileDown size={16} />
+              {activeDepartment === "engineering" ? "Generating..." : "Developer PDF"}
+            </button>
+          </div>
+          {!canDownloadReport ? (
+            <small className="field-helper">No completed simulation found yet. Start a simulation to enable report downloads.</small>
+          ) : null}
+          {pdfError ? <div className="alert error">{pdfError}</div> : null}
         </div>
       </section>
 

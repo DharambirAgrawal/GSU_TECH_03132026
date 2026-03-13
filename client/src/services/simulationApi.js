@@ -27,6 +27,13 @@ export const simulationApi = {
       token,
       body: { selection_id: selectionId },
     }),
+
+  generatePdfReport: ({ simulation_id, company_department }, token) =>
+    apiRequest("/api/agents/pdfs", {
+      method: "POST",
+      token,
+      body: { simulation_id, company_department },
+    }),
 };
 
 export const SIMULATION_DRAFT_KEY = "vigil_simulation_draft";
