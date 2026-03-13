@@ -358,7 +358,9 @@ def agentic_geo_automation(
 
     for prompt in prompts:
         processed_prompts += 1
-        responses = query_all_llms(prompt.text, search=True)
+        responses = query_all_llms(
+            prompt.text, search=True, platforms=["gemini", "chatgpt"]
+        )
 
         for model_name, response in responses.items():
             content = (response.content or "").strip()
