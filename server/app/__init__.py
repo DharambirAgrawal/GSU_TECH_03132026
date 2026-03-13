@@ -67,7 +67,7 @@ def create_app(config_name: str = "default") -> Flask:
         from .routes.simulations import bp as simulations_bp
 
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
-        app.register_blueprint(simulations_bp)
+        app.register_blueprint(simulations_bp, rl_prefix="/api/agent")
 
         # --------------------------------------------------------------
         # Step 5 — Health-check route (no auth needed)
