@@ -119,42 +119,23 @@ Notes:
 
 ---
 
-## 6) Run with Docker (Primary)
+## 6) Run Locally with `run.sh`
 
-This repo is intended to run with Docker.
-
-### Option A: run full system (client + server)
-
-From the repository root (folder that contains `docker-compose.yml`):
-
-```bash
-docker compose up --build
-```
-
-Services:
-- Client: `http://localhost:5173`
-- Server: `http://localhost:5000`
-
-### Option B: run backend container only
-
-From this `server` folder:
-
-```bash
-docker build -t geo-server .
-docker run --rm -p 5000:5000 --env-file ../.env geo-server
-```
-
-### Optional: local non-Docker mode
-
-If you need local Python execution:
+From the repository root:
 
 ```bash
 bash run.sh
 ```
 
-Optional worker process:
+This starts both services:
+- Client: `http://localhost:5173`
+- Server: `http://localhost:5000`
+
+Other modes:
 
 ```bash
+bash run.sh server
+bash run.sh client
 bash run.sh worker
 ```
 
