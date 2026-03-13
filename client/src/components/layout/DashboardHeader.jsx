@@ -4,6 +4,9 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 	const [isModalOpen, setIsModalOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
+	const [lastSimulationTime, setLastSimulationTime] = useState(
+		profile?.company?.last_simulation_at ? new Date(profile.company.last_simulation_at) : null
+	);
 	const [form, setForm] = useState({
 		product_specification: "",
 		additional_detail: "",
@@ -36,6 +39,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 				additional_detail: form.additional_detail.trim() || undefined,
 				n_iteration: Number(form.n_iteration),
 			});
+			setLastSimulationTime(new Date());
 			setIsModalOpen(false);
 		} catch (requestError) {
 			setError(requestError.message || "Failed to create simulation.");
@@ -71,16 +75,24 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						Domain: {profile?.company?.approved_email_domain || "-"} · Role: {profile?.user?.role || "member"}
 					</p>
 				</div>
-				<button type="button" className="btn btn-primary" onClick={openModal}>
-					Create Simulation
-				</button>
+
+				<div className="header-actions">
+					<button type="button" className="btn btn-primary btn-pulse" onClick={openModal}>
+						Create Simulation
+					</button>
+					<p className="last-simulation-text">
+						Last simulation: {lastSimulationTime
+							? lastSimulationTime.toLocaleString()
+							: "None yet"}
+					</p>
+				</div>
 			</div>
 
 			{isModalOpen ? (
 				<div className="modal-backdrop" onClick={closeModal}>
 					<form className="modal simulation-modal" onSubmit={handleGenerate} onClick={(event) => event.stopPropagation()}>
 						<h2>Create Simulation</h2>
-						<p>Enter required fields and generate prompts for a simulation draft.</p>
+						<p>Enter required fields to generate prompts for a simulation.</p>
 
 						<label>
 							Product specification
@@ -94,12 +106,12 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						</label>
 
 						<label>
-							Additional detail (optional)
+							Additional details(optional)
 							<textarea
 								name="additional_detail"
 								value={form.additional_detail}
 								onChange={updateField}
-								placeholder="Target budget, audience, and use case"
+								placeholder="Product not selling, audience, use case"
 								rows={3}
 							/>
 						</label>
@@ -120,7 +132,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						{error ? <div className="alert error">{error}</div> : null}
 
 						<div className="modal-actions">
-							<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} disabled={isSubmitting}>
+							<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} >
 								Cancel
 							</button>
 							<button type="submit" className="btn btn-primary" disabled={isSubmitting}>
