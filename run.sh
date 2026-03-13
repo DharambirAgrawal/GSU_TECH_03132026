@@ -6,11 +6,25 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
 CLIENT_DIR="$ROOT_DIR/client"
 VENV_DIR="$ROOT_DIR/.venv"
+PYTHON_BIN=""
+
+detect_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "[run.sh] Python not found. Install Python 3 and try again."
+    exit 1
+  fi
+}
 
 ensure_python_env() {
+  detect_python
+
   if [ ! -d "$VENV_DIR" ]; then
     echo "[run.sh] Creating Python virtual environment at $VENV_DIR ..."
-    python3 -m venv "$VENV_DIR"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
   fi
 
   if [ -f "$VENV_DIR/Scripts/activate" ]; then
