@@ -87,7 +87,7 @@ export default function RegisterPage() {
       </form>
 
       <p className="route-cta">
-        Already registered? <Link to={ROUTES.login}>Request magic link</Link>
+        Already registered? <Link to={ROUTES.login} style={{ color: '#8219a2' }}>Request magic link</Link>
       </p>
     </AuthCard>
   );

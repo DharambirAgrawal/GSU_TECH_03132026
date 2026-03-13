@@ -4,7 +4,7 @@ import AuthCard from "../../../components/common/AuthCard";
 import { ROUTES } from "../../../app/paths";
 import { authApi } from "../../../services/authApi";
 import { getSessionToken, setSessionToken } from "../../../services/session";
-import vigilLogo from "../../../assets/vigil_logopurple.png";
+import vigilLogo from "../../../assets/vigil_logopurple_128px.png";
 
 export default function LoginPage() {
   const location = useLocation();
@@ -93,15 +93,15 @@ export default function LoginPage() {
             {error ? <div className="alert error">{error}</div> : null}
             <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
-                <span className="spinner" style={{ marginRight: 8 }}></span>
+                <span className="spinner" style={{ alignItems: 'center' }}></span>
               ) : null}
               {isSubmitting ? "Sending..." : "Send Magic Link"}
             </button>
           </form>
         </div>
         {/* <button className="btn btn-secondary" type="submit">Go to Dashboard</button> */}
-        <p className="route-cta">
-          Need to register first? <Link to={ROUTES.register}>Register company</Link>
+        <p className="route-cta" >
+          Need to register first? <Link to={ROUTES.register} style={{ color: '#8219a2' }}>Register company</Link>
         </p>
       </AuthCard>
     </div>

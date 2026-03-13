@@ -8,6 +8,7 @@ export const ROUTES = {
   accuracy: "/accuracy",
   competitors: "/competitors",
   actions: "/actions",
+  queryTester: "/query-tester",
 };
 
 export const DASHBOARD_NAV_ITEMS = [
@@ -16,4 +17,5 @@ export const DASHBOARD_NAV_ITEMS = [
   { label: "Accuracy", path: ROUTES.accuracy, api: "/api/accuracy/*" },
   { label: "Competitors", path: ROUTES.competitors, api: "/api/competitors/*" },
   { label: "Actions", path: ROUTES.actions, api: "/api/actions/*" },
+  { label: "Query Tester", path: ROUTES.queryTester, api: "/api/query-tester/*" },
 ];

@@ -25,7 +25,10 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 
 	const updateField = (event) => {
 		const { name, value } = event.target;
-		setForm((prev) => ({ ...prev, [name]: name === "n_iteration" ? Number(value) : value }));
+		setForm((prev) => ({ 
+			...prev, 
+			[name]: name === "n_iteration" ? value : value 
+		}));
 	};
 
 	const handleGenerate = async (event) => {
@@ -37,7 +40,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 			await onGenerate({
 				product_specification: form.product_specification.trim(),
 				additional_detail: form.additional_detail.trim() || undefined,
-				n_iteration: Number(form.n_iteration),
+				n_iteration: Number(form.n_iteration) || 10,
 			});
 			setLastSimulationTime(new Date());
 			setIsModalOpen(false);

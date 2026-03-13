@@ -241,6 +241,7 @@
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   vertical-align: middle;
+  align-items: center;
 }
 @keyframes spin {
   0% { transform: rotate(0deg); }
@@ -629,15 +630,7 @@
   font-weight: 700;
 }
 
-.spinner {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  margin: 10px auto;
-  animation: spin 0.9s linear infinite;
-}
+
 
 @keyframes spin {
   to {

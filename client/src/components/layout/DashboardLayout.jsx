@@ -9,7 +9,7 @@ import {
   setSessionToken,
 } from "../../services/session";
 import DashboardHeader from "./DashboardHeader";
-import vigilLogo from "../../assets/vigil_logopurple.png";
+import vigilLogo from "../../assets/vigil_logopurple_128px.png";
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -127,7 +127,7 @@ export default function DashboardLayout() {
     return (
       <main className="dashboard-shell">
         <section className="dashboard-card">
-          <div className="spinner" aria-label="Loading" />
+          <div className="spinner" aria-label="Loading" align-items="center"/>
         </section>
       </main>
     );

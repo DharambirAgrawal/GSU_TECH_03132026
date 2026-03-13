@@ -37,7 +37,7 @@ function AccuracyChart({ data }) {
 
   return (
     <div style={{ marginTop: 36, background: '#fff', borderRadius: 12, boxShadow: '0 1px 4px #6366f11a', padding: 18 }}>
-      <div style={{ fontWeight: 700, color: '#4338ca', marginBottom: 8 }}>AI Accuracy Over Time</div>
+      <div style={{ fontWeight: 700, color: '#8219a2', marginBottom: 8 }}>AI Accuracy Over Time</div>
       <svg width={width} height={height} style={{ width: '100%', maxWidth: 420, display: 'block' }}>
         {/* Bars */}
         {data.map((d, i) => (
@@ -88,7 +88,7 @@ export default function AccuracyPage() {
 
   return (
     <div className="accuracy-page-header" style={{ maxWidth: 520, margin: '0 auto', padding: '2rem 1.5rem' }}>
-      <h1 style={{ textAlign: 'center', fontSize: 32, fontWeight: 800, color: '#4338ca', marginBottom: 6 }}>Accuracy Overview</h1>
+      <h1 style={{ textAlign: 'center', fontSize: 32, fontWeight: 800, color: '#8219a2', marginBottom: 6 }}>Accuracy Overview</h1>
       <p className="text-gray-500 mb-6" style={{ textAlign: 'center', fontSize: 16 }}>Summary of data accuracy and key findings.</p>
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
         <div style={{
@@ -101,7 +101,7 @@ export default function AccuracyPage() {
           alignItems: 'center',
           minWidth: 120,
         }}>
-          <div style={{ fontSize: 64, fontWeight: 900, color: '#4f46e5', lineHeight: 1 }}>{data.percent}%</div>
+          <div style={{ fontSize: 64, fontWeight: 900, color: '#8219a2', lineHeight: 1 }}>{data.percent}%</div>
           <div style={{ fontSize: 16, color: '#334155', marginTop: 8 }}>Overall Data Accuracy</div>
         </div>
       </div>

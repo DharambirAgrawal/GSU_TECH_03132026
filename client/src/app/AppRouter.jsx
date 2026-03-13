@@ -11,6 +11,7 @@ import VisibilityPage from "../features/visibility/pages/VisibilityPage";
 import AccuracyPage from "../features/accuracy/pages/AccuracyPage";
 import CompetitorsPage from "../features/competitors/pages/CompetitorsPage";
 import ActionsPage from "../features/actions/ActionsPage";
+import QueryTesterPage from "../features/query-tester/pages/QueryTesterPage";
 
 export default function AppRouter() {
   return (
@@ -32,6 +33,7 @@ export default function AppRouter() {
         <Route path={ROUTES.accuracy} element={<AccuracyPage />} />
         <Route path={ROUTES.competitors} element={<CompetitorsPage />} />
         <Route path={ROUTES.actions} element={<ActionsPage />} />
+        <Route path={ROUTES.queryTester} element={<QueryTesterPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to={ROUTES.home} replace />} />

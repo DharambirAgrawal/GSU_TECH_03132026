@@ -13,7 +13,7 @@ function StatCard({ title, value, sub, onClick, hoverDetails, color = "#6366f1" 
       onKeyDown={onClick ? (e => (e.key === 'Enter' || e.key === ' ') && onClick()) : undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ position: 'relative' }} // Ensure positioning context for absolute hoverDetails
+      style={{ position: 'relative' }}
     >
       <div style={{ fontSize: 13, color: color, fontWeight: 700, marginBottom: 2 }}>{title}</div>
       <div style={{ fontSize: 32, fontWeight: 800, color: color, marginBottom: 2 }}>{value}</div>
@@ -94,7 +94,7 @@ export default function DashboardOverviewPage() {
       {/* Welcome Banner */}
       <section className="welcome-banner">
         <div className="welcome-text">
-          <h1>Welcome back!! </h1>
+          <h1>Welcome back!!</h1>
           <p>Here's what's happening with <b>{companyName}</b> today.</p>
         </div>
         <div className="welcome-cta">
@@ -118,7 +118,7 @@ export default function DashboardOverviewPage() {
           title="Competitors"
           value="5 tracked"
           sub="Top 2 shown"
-          color="#6366f1"
+          color="#8219a2"
           onClick={() => navigate('/competitors')}
           hoverDetails={competitorsSpecs}
         />
