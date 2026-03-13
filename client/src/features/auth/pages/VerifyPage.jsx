@@ -18,21 +18,6 @@ export default function VerifyPage() {
       return;
     }
 
-    async function verifyMagicLink() {
-      try {
-        const data = await authApi.verifyMagicLink(token);
-        setSessionToken(data.session_token);
-        navigate(ROUTES.dashboard, { replace: true });
-      } catch (requestError) {
-        const text = String(requestError.message || "").toLowerCase();
-        let slug = "auth_error";
-        if (text.includes("invalid")) slug = "invalid_token";
-        if (text.includes("expired")) slug = "token_expired";
-        if (text.includes("used")) slug = "token_used";
-        navigate(`${ROUTES.login}?error=${slug}`, { replace: true });
-      }
-    }
-
     verifyMagicLink();
   }, [location.search, navigate]);
 
