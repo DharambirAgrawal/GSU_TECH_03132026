@@ -723,64 +723,75 @@ def get_gemini_response(
                 model=model_name,
                 contents=query,
                 config=types.GenerateContentConfig(
+                    system_instruction=(
+                        "You are a helpful research assistant. "
+                        "Always respond in clean Markdown format. "
+                        "Use inline citations like [1], [2] etc. to reference sources. "
+                        "Use headers (##), bullet points, and bold text where appropriate. "
+                        "Do NOT output any HTML. Do NOT output raw URLs inline — only use citations."
+                    ),
                     tools=[{"google_search": {}}],
                 ),
             )
 
             raw_text = _extract_text(response)
             sources = []
+            grounding_meta: dict = {}
 
             try:
                 candidate = response.candidates[0]
                 metadata = candidate.grounding_metadata
 
-                if (
-                    metadata
-                    and hasattr(metadata, "grounding_chunks")
-                    and metadata.grounding_chunks
-                ):
-                    # Build snippets from supports if available
-                    snippet_map = {}
-                    if (
-                        hasattr(metadata, "grounding_supports")
-                        and metadata.grounding_supports
-                    ):
+                if metadata:
+                    # Extract web_search_queries used (clean list, not HTML)
+                    web_search_queries = getattr(metadata, "web_search_queries", None) or []
+                    grounding_meta["web_search_queries"] = list(web_search_queries)
+
+                    # Build snippet map from grounding_supports
+                    snippet_map: dict[int, list[str]] = {}
+                    if hasattr(metadata, "grounding_supports") and metadata.grounding_supports:
                         for support in metadata.grounding_supports:
-                            if hasattr(support, "segment") and hasattr(
-                                support.segment, "text"
-                            ):
-                                text = support.segment.text
-                                indices = getattr(
-                                    support, "grounding_chunk_indices", []
+                            if hasattr(support, "segment") and hasattr(support.segment, "text"):
+                                seg_text = support.segment.text
+                                for idx in (getattr(support, "grounding_chunk_indices", []) or []):
+                                    snippet_map.setdefault(idx, [])
+                                    if seg_text not in snippet_map[idx]:
+                                        snippet_map[idx].append(seg_text)
+
+                    # Build sources from grounding_chunks
+                    if hasattr(metadata, "grounding_chunks") and metadata.grounding_chunks:
+                        for i, chunk in enumerate(metadata.grounding_chunks):
+                            if hasattr(chunk, "web") and chunk.web:
+                                snippet_parts = snippet_map.get(i, [])
+                                sources.append(
+                                    {
+                                        "rank": len(sources) + 1,
+                                        "title": getattr(chunk.web, "title", "Untitled"),
+                                        "url": getattr(chunk.web, "uri", "N/A"),
+                                        "snippet": " ... ".join(snippet_parts),
+                                    }
                                 )
-                                for idx in indices:
-                                    if idx not in snippet_map:
-                                        snippet_map[idx] = []
-                                    if text not in snippet_map[idx]:
-                                        snippet_map[idx].append(text)
 
-                    for i, chunk in enumerate(metadata.grounding_chunks):
-                        if hasattr(chunk, "web") and chunk.web:
-                            snippet_list = snippet_map.get(i, [])
-                            snippet_text = " ... ".join(snippet_list)
-
-                            sources.append(
-                                {
-                                    "rank": len(sources) + 1,
-                                    "title": getattr(chunk.web, "title", "Untitled"),
-                                    "url": getattr(chunk.web, "uri", "N/A"),
-                                    "snippet": snippet_text,
-                                }
-                            )
+                    grounding_meta["source_count"] = len(sources)
 
             except Exception as e:
                 logger.warning(f"Error extracting Gemini grounding metadata: {e}")
+
+            # Append a clean Markdown sources section to the response content
+            if sources:
+                md_sources = "\n\n---\n\n## Sources\n"
+                for src in sources:
+                    md_sources += f"\n[{src['rank']}] **{src['title']}** — <{src['url']}>"
+                    if src.get("snippet"):
+                        md_sources += f"\n> {src['snippet'][:200]}"
+                raw_text = raw_text + md_sources
 
             return LLMResponse(
                 content=raw_text,
                 sources=sources,
                 platform="gemini",
                 search_enabled=True,
+                metadata=grounding_meta,
                 raw_response=response,
             )
 
@@ -897,8 +908,8 @@ def query_all_llms(
 
 if __name__ == "__main__":
     print(
-        get_chatgpt_response(
-            "please give me about 20 laptop choices below 500 dollars that have 16gb ram and 512gb storage space",
+        get_gemini_response(
+            "who won the 2024 super bowl?",
             search=True,
         )
     )
