@@ -28,6 +28,8 @@ function App() {
     }
   }, []);
 
+  
+
   const handleLoginSubmit = (e) => {
     e.preventDefault();
     if (rememberMe) {
@@ -61,7 +63,7 @@ function App() {
             <h2>{newUser ? "Register Below" : "Sign In"}</h2>
             <input
               type="user"
-              placeholder="Enter username"
+              placeholder="Enter email"
               value={username}
               onChange={e => setUsername(e.target.value)}
               required
@@ -80,7 +82,7 @@ function App() {
                   placeholder="Company Details"
                   value={companyDetails}
                   onChange={e => setCompanyDetails(e.target.value)}
-                  required
+                  
                   rows={3}
                   style={{resize: 'vertical', marginBottom: '1rem'}}
                 />
@@ -94,7 +96,7 @@ function App() {
                   onChange={e => setRememberMe(e.target.checked)}
                   disabled={newUser}
                 />
-                Remember me
+                Remember Me
               </label>
               <button
                 type="button"
@@ -172,6 +174,7 @@ function App() {
               {activeTab === 'Dashboard' && (
                 <>
                   <h1>Welcome to your dashboard!</h1>
+
                 </>
               )}
               {activeTab === 'Visibility' && (
