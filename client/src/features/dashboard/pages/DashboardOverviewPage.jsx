@@ -30,14 +30,13 @@ export default function DashboardOverviewPage() {
               placeholder="Enter product name"
               value={productInput}
               onChange={e => setProductInput(e.target.value)}
-              style={{ display: 'block', width: '100%', marginBottom: 12 }}
             />
             <input
               type="text"
               placeholder="Why are you interested?"
               value={reasonInput}
               onChange={e => setReasonInput(e.target.value)}
-              style={{ display: 'block', width: '100%', marginBottom: 12 }}
+              
             />
             <button
               onClick={() => {
@@ -55,7 +54,7 @@ export default function DashboardOverviewPage() {
         </div>
       )}
       <section className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
-        {/* All stat cards same size */}
+        
         <article
           className="stat stat-visibility stat-box"
           tabIndex={0}
