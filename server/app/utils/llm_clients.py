@@ -662,17 +662,54 @@ def get_gemini_response(
         model_name = "gemini-2.5-flash"
 
         if search:
-            search_query = f"{SEARCH_SYSTEM_PROMPT}\n\nUser Query: {query}"
+            from google.genai import types
+            
             response = gemini_client.models.generate_content(
                 model=model_name,
-                contents=search_query,
+                contents=query,
+                config=types.GenerateContentConfig(
+                    tools=[{"google_search": {}}],
+                )
             )
 
             raw_text = _extract_text(response)
-            answer, sources = _parse_sources_from_text(raw_text)
+            sources = []
+            
+            try:
+                candidate = response.candidates[0]
+                metadata = candidate.grounding_metadata
+                
+                if metadata and hasattr(metadata, 'grounding_chunks') and metadata.grounding_chunks:
+                    # Build snippets from supports if available
+                    snippet_map = {}
+                    if hasattr(metadata, 'grounding_supports') and metadata.grounding_supports:
+                        for support in metadata.grounding_supports:
+                            if hasattr(support, 'segment') and hasattr(support.segment, 'text'):
+                                text = support.segment.text
+                                indices = getattr(support, 'grounding_chunk_indices', [])
+                                for idx in indices:
+                                    if idx not in snippet_map:
+                                        snippet_map[idx] = []
+                                    if text not in snippet_map[idx]:
+                                        snippet_map[idx].append(text)
+                                        
+                    for i, chunk in enumerate(metadata.grounding_chunks):
+                        if hasattr(chunk, 'web') and chunk.web:
+                            snippet_list = snippet_map.get(i, [])
+                            snippet_text = " ... ".join(snippet_list)
+                            
+                            sources.append({
+                                "rank": len(sources) + 1,
+                                "title": getattr(chunk.web, 'title', 'Untitled'),
+                                "url": getattr(chunk.web, 'uri', 'N/A'),
+                                "snippet": snippet_text
+                            })
+                            
+            except Exception as e:
+                logger.warning(f"Error extracting Gemini grounding metadata: {e}")
 
             return LLMResponse(
-                content=answer or raw_text,
+                content=raw_text,
                 sources=sources,
                 platform="gemini",
                 search_enabled=True,
