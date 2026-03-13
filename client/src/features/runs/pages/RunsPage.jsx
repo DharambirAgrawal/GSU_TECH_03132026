@@ -40,7 +40,7 @@ export default function RunsPage() {
 
   return (
     <main >
-      <h1 style={{ fontWeight: 700, fontSize: 32, marginBottom: 16, letterSpacing: 1, color: '#7f9cf5', textAlign: 'center' }}>Console Runner</h1>
+      <h1 style={{ fontWeight: 700, fontSize: 32, marginBottom: 16, letterSpacing: 1, color: '#4f46e5', textAlign: 'center' }}>Console Runner</h1>
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 16, marginBottom: 32, flexWrap: 'wrap' }}>
         <div>
           <label htmlFor="product-select" style={{ color: '#b3b8d4', fontWeight: 500 }}>Select product:</label><br />

@@ -8,11 +8,87 @@ const mockCompetitors = [
   { name: "Hooli", score: 70, marketShare: 10, trend: "-0.5%" },
 ];
 
+// MetricCard component
+function MetricCard({ label, value, sub }) {
+  return (
+    <div style={{
+      background: '#f1f5f9',
+      borderRadius: 10,
+      padding: '18px 14px',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      minWidth: 0,
+      boxShadow: '0 1px 4px rgba(30,64,175,0.04)'
+    }}>
+      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: '#1e293b', marginBottom: 2 }}>{value}</div>
+      <div style={{ fontSize: 12, color: '#64748b' }}>{sub}</div>
+    </div>
+  );
+}
+
+// ScoreBar component
+function ScoreBar({ score, max }) {
+  const percent = max ? Math.round((score / max) * 100) : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ width: 60, height: 8, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden', marginRight: 6 }}>
+        <div style={{ width: `${percent}%`, height: '100%', background: '#6366f1', borderRadius: 4, transition: 'width 0.3s' }} />
+      </div>
+      <span style={{ fontWeight: 600, color: '#334155', fontSize: 13 }}>{score}</span>
+    </div>
+  );
+}
+
+// TrendBadge component
+function TrendBadge({ trend }) {
+  const isPositive = trend.startsWith('+');
+  const isNegative = trend.startsWith('-');
+  return (
+    <span style={{
+      display: 'inline-block',
+      background: isPositive ? '#dcfce7' : isNegative ? '#fee2e2' : '#f3f4f6',
+      color: isPositive ? '#15803d' : isNegative ? '#b91c1c' : '#64748b',
+      fontWeight: 700,
+      fontSize: 13,
+      borderRadius: 6,
+      padding: '2px 10px',
+      minWidth: 36,
+      textAlign: 'center',
+    }}>{trend}</span>
+  );
+}
+
+// MarketShareChart component (simple bar chart)
+function MarketShareChart({ competitors }) {
+  const total = competitors.reduce((sum, c) => sum + c.marketShare, 0);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 60, background: '#f9fafb', borderRadius: 8, padding: '12px 10px' }}>
+      {competitors.map((c, i) => {
+        const percent = total ? (c.marketShare / total) * 100 : 0;
+        return (
+          <div key={c.name} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{
+              height: `${percent * 0.5 + 10}px`,
+              width: 18,
+              background: i === 0 ? '#6366f1' : '#a5b4fc',
+              borderRadius: 6,
+              marginBottom: 4,
+              transition: 'height 0.3s',
+            }} />
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{c.name.split(' ')[0]}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CompetitorsPage() {
   const [competitors, setCompetitors] = useState([]);
 
   useEffect(() => {
-
     setTimeout(() => setCompetitors(mockCompetitors), 500);
   }, []);
 
@@ -40,25 +116,33 @@ export default function CompetitorsPage() {
             {competitors.map((c, i) => (
               <tr key={c.name} className={i === 0 ? "bg-indigo-50 font-semibold" : ""}>
                 <td className="py-2 px-4">{c.name}</td>
-                <td className="py-2 px-4">{c.score}</td>
+                <td className="py-2 px-4">
+                  <ScoreBar score={c.score} max={100} />
+                </td>
                 <td className="py-2 px-4">{c.marketShare}</td>
-                <td className="py-2 px-4">{c.trend}</td>
+                <td className="py-2 px-4">
+                  <TrendBadge trend={c.trend} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-indigo-100 rounded p-4 text-indigo-900">
-          <div className="text-lg font-bold">Top Competitor</div>
-          <div className="text-xl">{topCompetitor ? topCompetitor.name : "-"}</div>
-          <div className="text-sm text-indigo-700 mt-1">Score: {topCompetitor ? topCompetitor.score : "-"}</div>
-        </div>
-        <div className="bg-green-100 rounded p-4 text-green-900">
-          <div className="text-lg font-bold">Average Score</div>
-          <div className="text-xl">{avgScore}</div>
-          <div className="text-sm text-green-700 mt-1">Across {competitors.length} competitors</div>
-        </div>
+        <MetricCard
+          label="Top Competitor"
+          value={topCompetitor ? topCompetitor.name : "-"}
+          sub={`Score: ${topCompetitor ? topCompetitor.score : "-"}`}
+        />
+        <MetricCard
+          label="Average Score"
+          value={avgScore}
+          sub={`Across ${competitors.length} competitors`}
+        />
+      </div>
+      <div className="mt-8">
+        <h2 className="text-lg font-bold mb-2">Market Share</h2>
+        <MarketShareChart competitors={competitors} />
       </div>
     </div>
   );
