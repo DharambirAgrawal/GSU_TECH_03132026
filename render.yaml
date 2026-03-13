@@ -28,7 +28,8 @@ services:
       - key: CELERY_RESULT_BACKEND
         sync: false
 
-  - type: static
+  - type: web
+    runtime: static
     name: vigil-client
     rootDir: client
     buildCommand: npm ci && npm run build
