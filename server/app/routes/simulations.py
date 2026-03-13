@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import threading
 from datetime import datetime, timezone
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel, ValidationError, field_validator
 from app.extensions import db
 from app.models.simulation import Simulation
 from app.services.auth_service import require_company_session
+from app.services.pdf_report_generator import generate_department_report_pdf
 from app.tasks.simulations import run_agentic_geo_automation
 
 bp = Blueprint("simulations", __name__)
@@ -23,6 +25,28 @@ class StartSimulationRequest(BaseModel):
     def selection_id_not_blank(cls, value: str) -> str:
         if not value or not value.strip():
             raise ValueError("selection_id cannot be blank.")
+        return value.strip()
+
+
+class GeneratePdfRequest(BaseModel):
+    company_department: str
+    simulation_id: str
+
+    @field_validator("company_department")
+    @classmethod
+    def company_department_valid(cls, value: str) -> str:
+        normalized = (value or "").strip().lower()
+        if normalized not in {"engineering", "marketing", "marketting"}:
+            raise ValueError(
+                "company_department must be engineering or marketting/marketing."
+            )
+        return normalized
+
+    @field_validator("simulation_id")
+    @classmethod
+    def simulation_id_not_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("simulation_id cannot be blank.")
         return value.strip()
 
 
@@ -95,4 +119,59 @@ def start_simulation():
             }
         ),
         202,
+    )
+
+
+@bp.route("/pdfs", methods=["POST"])
+def generate_pdf_report():
+    """Generate an actionable department-specific PDF report for a simulation."""
+    try:
+        user, company = require_company_session(request)
+    except PermissionError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 401
+
+    body, err = _parse_body(GeneratePdfRequest)
+    if err:
+        return err
+
+    simulation = Simulation.query.filter_by(
+        id=body.simulation_id,
+        company_id=company.id,
+    ).first()
+    if simulation is None:
+        return jsonify({"success": False, "message": "Simulation not found."}), 404
+
+    try:
+        pdf_bytes, metadata = generate_department_report_pdf(
+            simulation=simulation,
+            company_department=body.company_department,
+        )
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except Exception as exc:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Failed to generate PDF report.",
+                    "error": str(exc),
+                }
+            ),
+            500,
+        )
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "PDF report generated.",
+                "simulation_id": simulation.id,
+                "company_department": metadata.get("department"),
+                "filename": metadata.get("filename"),
+                "content_type": "application/pdf",
+                "pdf_base64": base64.b64encode(pdf_bytes).decode("utf-8"),
+                "metadata": metadata,
+            }
+        ),
+        200,
     )
