@@ -80,7 +80,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 				<div className="modal-backdrop" onClick={closeModal}>
 					<form className="modal simulation-modal" onSubmit={handleGenerate} onClick={(event) => event.stopPropagation()}>
 						<h2>Create Simulation</h2>
-						<p>Enter required fields and generate prompts for a simulation draft.</p>
+						<p>Enter required fields to generate prompts for a simulation.</p>
 
 						<label>
 							Product specification
@@ -94,12 +94,12 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						</label>
 
 						<label>
-							Additional detail (optional)
+							Additional details(optional)
 							<textarea
 								name="additional_detail"
 								value={form.additional_detail}
 								onChange={updateField}
-								placeholder="Target budget, audience, and use case"
+								placeholder="Product not selling, audience, use case"
 								rows={3}
 							/>
 						</label>
@@ -120,7 +120,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						{error ? <div className="alert error">{error}</div> : null}
 
 						<div className="modal-actions">
-							<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} disabled={isSubmitting}>
+							<button type="button" className="btn btn-secondary" onClick={handleCancelDraft} >
 								Cancel
 							</button>
 							<button type="submit" className="btn btn-primary" disabled={isSubmitting}>
