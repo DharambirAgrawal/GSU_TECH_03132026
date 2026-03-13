@@ -119,12 +119,26 @@ Notes:
 
 ---
 
-## 6) Run Locally with `run.sh`
+## 6) Run Locally
 
-From the repository root:
+From the repository root, start both services:
+
+macOS/Linux (or Git Bash):
 
 ```bash
 bash run.sh
+```
+
+Windows PowerShell:
+
+```powershell
+./run.ps1
+```
+
+Windows CMD:
+
+```bat
+run.bat
 ```
 
 This starts both services:
@@ -133,10 +147,20 @@ This starts both services:
 
 Other modes:
 
+macOS/Linux:
+
 ```bash
 bash run.sh server
 bash run.sh client
 bash run.sh worker
+```
+
+Windows PowerShell:
+
+```powershell
+./run.ps1 server
+./run.ps1 client
+./run.ps1 worker
 ```
 
 ---
