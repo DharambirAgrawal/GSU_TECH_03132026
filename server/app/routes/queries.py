@@ -118,10 +118,13 @@ def create_queries():
     try:
         generated = generate_queries(
             company_name=company.name,
+            product=body.product_specification,
             num_queries=body.n_iteration,
         )
         prompt_texts = [item.text for item in generated]
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"Error generating queries dynamically: {e}")
         # Fallback keeps route functional for companies not yet in query profiles.
         prompt_texts = _fallback_prompt_texts(
             product_specification=body.product_specification,

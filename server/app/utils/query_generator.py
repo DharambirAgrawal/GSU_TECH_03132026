@@ -601,6 +601,134 @@ def generate_queries(
     seed: Optional[int] = None,
 ) -> list[GeneratedQuery]:
     """
+    Generate realistic consumer search queries for brand visibility monitoring using an LLM.
+
+    Every query is shaped by the `product` argument and `company_name`. 
+    If the user enters something vague like "test", the LLM uses context to generate plausible queries.
+
+    Args:
+        company_name:       Target brand (e.g. "capital one", "ebay")
+        product:            Topic for every query. E.g. "mobile", "laptop"
+        num_queries:        Total queries to generate.
+        branded_weight:     Share including brand name. Default 0.70.
+        unbranded_weight:   Share generic/no brand. Default 0.25.
+        competitor_weight:  Share mentioning competitor vs brand. Default 0.05.
+        human_imperfection: Add realistic typos/lowercase/slang. Default True.
+        seed:               Int for reproducible output. None = random.
+
+    Returns:
+        List[GeneratedQuery] — access .text for the query string.
+    """
+    import json
+    import logging
+    logger = logging.getLogger(__name__)
+
+    key = company_name.strip().lower()
+    
+    # Try to grab rich context, but default to basic info if missing
+    profile = COMPANY_PROFILES.get(key, {
+        "display_name": company_name.title(),
+        "competitors": ["leading competitor", "alternative option"],
+        "price_anchors": ["cheap", "affordable"],
+        "attributes": ["quality", "price"],
+        "use_contexts": ["general use"],
+        "customer_types": ["regular consumer", "professional"],
+        "pain_points": ["expensive", "poor support"]
+    })
+
+    # Ensure weights sum nicely
+    total_w = branded_weight + unbranded_weight + competitor_weight
+    if not (0.98 <= total_w <= 1.02):
+        logger.warning(f"Weights must sum to 1.0 (got {total_w:.2f}). Proceeding anyway.")
+
+    n_branded    = round(num_queries * (branded_weight / total_w))
+    n_unbranded  = round(num_queries * (unbranded_weight / total_w))
+    n_competitor = num_queries - n_branded - n_unbranded
+
+    prompt = f"""You are an expert SEO and consumer search intent researcher.
+We need EXACTLY {num_queries} highly realistic Google search queries related to the company "{profile['display_name']}" AND the product/topic "{product}".
+
+Even if "{product}" seems like a vague test word (e.g., "test", "demo", "foo"), intelligently interpret it or creatively build consumer search scenarios around assessing "{profile['display_name']}" in the context of "{product}". Do not just append "{product}" as a simple string—make it flow naturally.
+
+Query distribution MUST EXACTLY be:
+1. {n_branded} queries MUST include the brand "{profile['display_name']}".
+2. {n_unbranded} queries MUST BE UNBRANDED (do not mention {profile['display_name']} or any competitors, just generic consumer searches involving "{product}").
+3. {n_competitor} queries MUST compare "{profile['display_name']}" to a competitor like {', '.join(profile['competitors'][:3])}.
+
+Personas & Variety:
+Make the text highly varied. Alternate casually between:
+- "quick_buyer": Short fragments ("best {product}")
+- "researcher": Thoughtful questions ("what is the best {product} for...")
+- "deal_hunter": Looking for sales ("cheapest {product}")
+- "skeptic": Seeking problems/reddit reviews ("{profile['display_name']} {product} scam or legit")
+- "casual_browser": broad exploration
+
+{ "Include occasional, natural minor typos, missing capitalization, and internet slang (e.g., 'tbh', 'reddit') so they look like real human google searches." if human_imperfection else "Output queries using perfect capitalization and grammar."}
+
+Output MUST BE a pure, valid JSON array of objects. No markdown formatting blocks (NO \`\`\`json). Just the raw list.
+Use this EXACT JSON schema for each dictionary:
+[
+  {{
+    "text": "the actual search query string typed by the user",
+    "bucket": "branded" | "unbranded" | "competitor",
+    "persona": "quick_buyer" | "researcher" | "deal_hunter" | "skeptic" | "casual_browser"
+  }}
+]
+"""
+
+    try:
+        from app.utils.llm_clients import get_chatgpt_response
+        response = get_chatgpt_response(prompt, temperature=0.7, search=False)
+        content = response.content.strip()
+        
+        # Clean markdown if OpenAI included it despite instructions
+        if content.startswith("```json"):
+            content = content[7:]
+        elif content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+            
+        parsed = json.loads(content.strip())
+        
+        queries = []
+        for item in parsed:
+            queries.append(GeneratedQuery(
+                text=item.get("text", "").strip(),
+                is_branded=(item.get("bucket") != "unbranded"),
+                bucket=item.get("bucket", "branded"),
+                persona=item.get("persona", "casual_browser"),
+                company=profile["display_name"],
+                product_topic=product,
+                slots={} # Omitted for dynamic gen
+            ))
+            
+        # Shuffle
+        rng = random.Random(seed if seed is not None else time.time())
+        rng.shuffle(queries)
+        
+        # Make sure we don't return more than requested
+        return queries[:num_queries]
+
+    except Exception as e:
+        logger.error(f"LLM generation failed: {str(e)}. Falling back to template-based generation.")
+        return generate_queries_template_fallback(
+            company_name, product, num_queries, 
+            branded_weight, unbranded_weight, competitor_weight, 
+            human_imperfection, seed
+        )
+
+def generate_queries_template_fallback(
+    company_name: str,
+    product: str,
+    num_queries: int = 50,
+    branded_weight: float = 0.70,
+    unbranded_weight: float = 0.25,
+    competitor_weight: float = 0.05,
+    human_imperfection: bool = True,
+    seed: Optional[int] = None,
+) -> list[GeneratedQuery]:
+    """
     Generate realistic consumer search queries for brand visibility monitoring.
 
     Every query is shaped by the `product` argument — pass "mobile" and every
