@@ -19,19 +19,30 @@ def run_agentic_geo_automation(simulation_id: str) -> dict[str, object]:
     simulation.status = "running"
     db.session.commit()
 
-    result = agentic_geo_automation(
-        simulation_id=simulation.id,
-        recipient_email=simulation.contact_email,
-        frontend_base_url=current_app.config.get("FRONTEND_BASE_URL", ""),
-    )
+    try:
+        result = agentic_geo_automation(
+            simulation_id=simulation.id,
+            recipient_email=simulation.contact_email,
+            frontend_base_url=current_app.config.get("FRONTEND_BASE_URL", ""),
+        )
 
-    simulation.status = "completed"
-    simulation.time_ended = datetime.now(timezone.utc)
-    db.session.commit()
+        simulation.status = "completed"
+        simulation.time_ended = datetime.now(timezone.utc)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        simulation = Simulation.query.get(simulation_id)
+        if simulation is not None:
+            simulation.status = "failed"
+            simulation.time_ended = datetime.now(timezone.utc)
+            db.session.commit()
+        raise
 
     return {
         "simulation_id": simulation.id,
         "status": simulation.status,
-        "delay_seconds": result["delay_seconds"],
-        "email_sent": result["email_sent"],
+        "delay_seconds": result.get("delay_seconds", 0),
+        "email_sent": result.get("email_sent", False),
+        "processed_prompts": result.get("processed_prompts", 0),
+        "model_runs_created": result.get("model_runs_created", 0),
     }
