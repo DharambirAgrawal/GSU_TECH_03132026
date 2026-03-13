@@ -12,3 +12,4 @@ openai
 anthropic
 google-genai
 scikit-learn
+reportlab

@@ -670,5 +670,112 @@ class TestStartSimulationsRoute(_AppTestCase):
         self.assertFalse(response.get_json()["success"])
 
 
+# ---------------------------------------------------------------------------
+# 7. Route: POST /api/agents/pdfs
+# ---------------------------------------------------------------------------
+
+
+class TestGeneratePdfRoute(_AppTestCase):
+    def _create_simulation(self, company, user):
+        sim = Simulation(
+            company_id=company.id,
+            company_user_id=user.id,
+            time_started=datetime.now(timezone.utc),
+            status="completed",
+            product_specification="pdf target",
+            n_iteration=1,
+        )
+        self.db.session.add(sim)
+        self.db.session.commit()
+        return sim
+
+    def test_no_auth_returns_401(self):
+        with patch(
+            "app.routes.simulations.require_company_session",
+            side_effect=PermissionError("No session."),
+        ):
+            response = self.client.post(
+                "/api/agents/pdfs",
+                data=json.dumps(
+                    {
+                        "company_department": "engineering",
+                        "simulation_id": "abc",
+                    }
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 401)
+
+    def test_validation_returns_400(self):
+        company, user = self._seed_company_and_user()
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ):
+            response = self.client.post(
+                "/api/agents/pdfs",
+                data=json.dumps({"simulation_id": "abc"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_simulation_returns_404(self):
+        company, user = self._seed_company_and_user()
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ):
+            response = self.client.post(
+                "/api/agents/pdfs",
+                data=json.dumps(
+                    {
+                        "company_department": "engineering",
+                        "simulation_id": "00000000-0000-0000-0000-000000000000",
+                    }
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_success_returns_pdf_base64(self):
+        company, user = self._seed_company_and_user()
+        sim = self._create_simulation(company, user)
+
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ), patch(
+            "app.routes.simulations.generate_department_report_pdf"
+        ) as mock_generate:
+            mock_generate.return_value = (
+                b"%PDF-1.4\nMock PDF\n",
+                {
+                    "filename": "geo_report_engineering_test.pdf",
+                    "department": "engineering",
+                    "simulation_id": sim.id,
+                    "generated_at": "2026-03-13T00:00:00Z",
+                },
+            )
+
+            response = self.client.post(
+                "/api/agents/pdfs",
+                data=json.dumps(
+                    {
+                        "company_department": "engineering",
+                        "simulation_id": sim.id,
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        body = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["simulation_id"], sim.id)
+        self.assertEqual(body["company_department"], "engineering")
+        self.assertEqual(body["filename"], "geo_report_engineering_test.pdf")
+        self.assertTrue(isinstance(body.get("pdf_base64"), str) and body["pdf_base64"])
+
+
 if __name__ == "__main__":
     unittest.main()

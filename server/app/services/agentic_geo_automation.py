@@ -6,10 +6,20 @@ import logging
 from urllib.parse import urlparse
 
 from app.extensions import db
-from app.models.simulation import Citation, Error, FactCheck, Prompt, PromptModelRun, Simulation
+from app.models.simulation import (
+    Citation,
+    Error,
+    FactCheck,
+    Prompt,
+    PromptModelRun,
+    Simulation,
+)
 from app.services.emailing import send_email
 from app.services.fact_check import fact_check as nlp_fact_check
-from app.services.metrices_generator import analyze_llm_response, generate_report_summary
+from app.services.metrices_generator import (
+    analyze_llm_response,
+    generate_report_summary,
+)
 from app.utils.link_parser import parse_links_with_context
 from app.utils.llm_clients import query_all_llms
 from app.utils.query_generator import COMPANY_PROFILES
@@ -144,7 +154,13 @@ def _run_path2_nlp_fact_checks(
 
     all_links = all_links[:_MAX_PATH2_URLS]
 
-    stats = {"total": len(all_links), "passed": 0, "low_score": 0, "dead": 0, "errors": 0}
+    stats = {
+        "total": len(all_links),
+        "passed": 0,
+        "low_score": 0,
+        "dead": 0,
+        "errors": 0,
+    }
 
     for url, ctx in all_links:
         domain = _extract_bare_domain(url)
@@ -153,48 +169,62 @@ def _run_path2_nlp_fact_checks(
             result = nlp_fact_check(url, content)
 
             # ── always write a FactCheck row ────────────────────────────────
-            db.session.add(FactCheck(
-                simulation_id=simulation_id,
-                prompt_id=prompt_id,
-                run_id=run_id,
-                company_link=url,
-                ai_text_about=content[:2000],
-                fact_score=result.fact_score,
-                reason_for_score=result.reason_for_score,
-                mitigation=result.mitigation,
-                model_name=model_name,
-            ))
-
-            # ── Citation (only for models that skipped Path 1) ───────────────
-            if create_citations:
-                db.session.add(Citation(
-                    simulation_id=simulation_id,
-                    prompt_id=prompt_id,
-                    run_id=run_id,
-                    company_cited=ctx[:255],
-                    website_domain=domain or "unknown",
-                    cited_url=url,
-                    model_name=model_name,
-                ))
-
-            # ── hallucination / low-support Error ────────────────────────────
-            if result.fact_score < 0.35:
-                stats["low_score"] += 1
-                severity = "critical" if result.fact_score < 0.15 else "high" if result.fact_score < 0.25 else "medium"
-                db.session.add(Error(
+            db.session.add(
+                FactCheck(
                     simulation_id=simulation_id,
                     prompt_id=prompt_id,
                     run_id=run_id,
                     company_link=url,
-                    error_type="hallucination" if result.fact_score < 0.20 else "factual_error",
-                    severity=severity,
-                    reason_for_failure=(
-                        f"NLP fact-check score {result.fact_score:.2f} — "
-                        + result.reason_for_score[:500]
-                    ),
-                    mitigation=result.mitigation[:500],
+                    ai_text_about=content[:2000],
+                    fact_score=result.fact_score,
+                    reason_for_score=result.reason_for_score,
+                    mitigation=result.mitigation,
                     model_name=model_name,
-                ))
+                )
+            )
+
+            # ── Citation (only for models that skipped Path 1) ───────────────
+            if create_citations:
+                db.session.add(
+                    Citation(
+                        simulation_id=simulation_id,
+                        prompt_id=prompt_id,
+                        run_id=run_id,
+                        company_cited=ctx[:255],
+                        website_domain=domain or "unknown",
+                        cited_url=url,
+                        model_name=model_name,
+                    )
+                )
+
+            # ── hallucination / low-support Error ────────────────────────────
+            if result.fact_score < 0.35:
+                stats["low_score"] += 1
+                severity = (
+                    "critical"
+                    if result.fact_score < 0.15
+                    else "high" if result.fact_score < 0.25 else "medium"
+                )
+                db.session.add(
+                    Error(
+                        simulation_id=simulation_id,
+                        prompt_id=prompt_id,
+                        run_id=run_id,
+                        company_link=url,
+                        error_type=(
+                            "hallucination"
+                            if result.fact_score < 0.20
+                            else "factual_error"
+                        ),
+                        severity=severity,
+                        reason_for_failure=(
+                            f"NLP fact-check score {result.fact_score:.2f} — "
+                            + result.reason_for_score[:500]
+                        ),
+                        mitigation=result.mitigation[:500],
+                        model_name=model_name,
+                    )
+                )
             else:
                 stats["passed"] += 1
 
@@ -204,34 +234,43 @@ def _run_path2_nlp_fact_checks(
             logger.debug("[path2] dead link: %s (%s)", url, model_name)
 
             if create_citations:
-                db.session.add(Citation(
+                db.session.add(
+                    Citation(
+                        simulation_id=simulation_id,
+                        prompt_id=prompt_id,
+                        run_id=run_id,
+                        company_cited=ctx[:255],
+                        website_domain=domain or "unknown",
+                        cited_url=url,
+                        model_name=model_name,
+                    )
+                )
+
+            db.session.add(
+                Error(
                     simulation_id=simulation_id,
                     prompt_id=prompt_id,
                     run_id=run_id,
-                    company_cited=ctx[:255],
-                    website_domain=domain or "unknown",
-                    cited_url=url,
+                    company_link=url,
+                    error_type="dead_link",
+                    severity="high",
+                    reason_for_failure=f"URL unreachable during NLP fact-check: {url}",
+                    mitigation=(
+                        "Verify the page is publicly indexed. "
+                        "Submit to sitemaps and check for login walls or geo-blocks."
+                    ),
                     model_name=model_name,
-                ))
-
-            db.session.add(Error(
-                simulation_id=simulation_id,
-                prompt_id=prompt_id,
-                run_id=run_id,
-                company_link=url,
-                error_type="dead_link",
-                severity="high",
-                reason_for_failure=f"URL unreachable during NLP fact-check: {url}",
-                mitigation=(
-                    "Verify the page is publicly indexed. "
-                    "Submit to sitemaps and check for login walls or geo-blocks."
-                ),
-                model_name=model_name,
-            ))
+                )
+            )
 
         except Exception as exc:
             stats["errors"] += 1
-            logger.warning("[path2] nlp_fact_check unexpected error | url=%s model=%s: %s", url, model_name, exc)
+            logger.warning(
+                "[path2] nlp_fact_check unexpected error | url=%s model=%s: %s",
+                url,
+                model_name,
+                exc,
+            )
 
     db.session.commit()
     _update_run_dead_count(run_id, stats["dead"])
@@ -239,8 +278,13 @@ def _run_path2_nlp_fact_checks(
 
     logger.info(
         "[path2] %s | sim=%s | urls=%d passed=%d low_score=%d dead=%d errors=%d",
-        model_name, simulation_id[:8],
-        stats["total"], stats["passed"], stats["low_score"], stats["dead"], stats["errors"],
+        model_name,
+        simulation_id[:8],
+        stats["total"],
+        stats["passed"],
+        stats["low_score"],
+        stats["dead"],
+        stats["errors"],
     )
     return stats
 
@@ -291,7 +335,9 @@ def agentic_geo_automation(
     profile = COMPANY_PROFILES.get(company_name.strip().lower(), {})
     competitors: list[str] = list(profile.get("competitors", []))
 
-    about_company = simulation.about_company or (company.about_company if company else None)
+    about_company = simulation.about_company or (
+        company.about_company if company else None
+    )
     product_specification = simulation.product_specification
 
     prompts = (
@@ -305,7 +351,9 @@ def agentic_geo_automation(
 
     logger.info(
         "[automation] Starting simulation %s | prompts=%d | company=%s",
-        simulation_id, len(prompts), company_name,
+        simulation_id,
+        len(prompts),
+        company_name,
     )
 
     for prompt in prompts:
@@ -317,23 +365,33 @@ def agentic_geo_automation(
 
             # ── complete API failure → record and skip both paths ─────────────
             if content.startswith("[ERROR]"):
-                db.session.add(PromptModelRun(
-                    simulation_id=simulation_id,
-                    prompt_id=prompt.id,
-                    model_name=model_name,
-                    success_or_failed="failed",
-                    failure_reason=content,
-                    mitigation="Retry after rate limits clear or API credentials are refreshed.",
-                    citations_found_count=0,
-                    dead_links_count=0,
-                ))
+                db.session.add(
+                    PromptModelRun(
+                        simulation_id=simulation_id,
+                        prompt_id=prompt.id,
+                        model_name=model_name,
+                        success_or_failed="failed",
+                        failure_reason=content,
+                        mitigation="Retry after rate limits clear or API credentials are refreshed.",
+                        citations_found_count=0,
+                        dead_links_count=0,
+                    )
+                )
                 db.session.commit()
                 model_runs_created += 1
-                logger.warning("[automation] %s returned error, skipping | sim=%s", model_name, simulation_id[:8])
+                logger.warning(
+                    "[automation] %s returned error, skipping | sim=%s",
+                    model_name,
+                    simulation_id[:8],
+                )
                 continue
 
             if not content:
-                logger.warning("[automation] %s returned empty content, skipping | sim=%s", model_name, simulation_id[:8])
+                logger.warning(
+                    "[automation] %s returned empty content, skipping | sim=%s",
+                    model_name,
+                    simulation_id[:8],
+                )
                 continue
 
             run_id: str | None = None
@@ -370,7 +428,9 @@ def agentic_geo_automation(
                 except Exception as exc:
                     logger.exception(
                         "[path1] analyze_llm_response failed | sim=%s prompt=%s model=%s",
-                        simulation_id, prompt.id, model_name,
+                        simulation_id,
+                        prompt.id,
+                        model_name,
                     )
                     db.session.rollback()
                     # create a failed run so path 2 still has something to attach to
@@ -392,7 +452,10 @@ def agentic_geo_automation(
                         model_runs_created += 1
                     except Exception:
                         db.session.rollback()
-                        logger.exception("[automation] could not persist failed run for %s", model_name)
+                        logger.exception(
+                            "[automation] could not persist failed run for %s",
+                            model_name,
+                        )
 
             # ═════════════════════════════════════════════════════════════════
             # For claude / perplexity: create basic run before Path 2
@@ -409,7 +472,9 @@ def agentic_geo_automation(
                     model_runs_created += 1
                 except Exception:
                     db.session.rollback()
-                    logger.exception("[automation] could not create basic run for %s", model_name)
+                    logger.exception(
+                        "[automation] could not create basic run for %s", model_name
+                    )
                     run_id = None
 
             # ═════════════════════════════════════════════════════════════════
@@ -431,7 +496,9 @@ def agentic_geo_automation(
                     db.session.rollback()
                     logger.exception(
                         "[path2] unexpected failure | sim=%s prompt=%s model=%s",
-                        simulation_id, prompt.id, model_name,
+                        simulation_id,
+                        prompt.id,
+                        model_name,
                     )
 
     # ── Aggregate everything into the ReportSummary row ──────────────────────
@@ -461,7 +528,10 @@ def agentic_geo_automation(
 
     logger.info(
         "[automation] Done | sim=%s | prompts=%d runs=%d email_sent=%s",
-        simulation_id[:8], processed_prompts, model_runs_created, email_sent,
+        simulation_id[:8],
+        processed_prompts,
+        model_runs_created,
+        email_sent,
     )
 
     return {
