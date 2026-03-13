@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 from urllib.parse import urlparse
+import logging
+from urllib.parse import urlparse
 
 from app.extensions import db
 from app.models.simulation import Citation, Error, FactCheck, Prompt, PromptModelRun, Simulation
@@ -464,6 +466,9 @@ def agentic_geo_automation(
 
     return {
         "simulation_id": simulation_id,
+        "processed_prompts": processed_prompts,
+        "model_runs_created": model_runs_created,
+        "delay_seconds": 0,
         "processed_prompts": processed_prompts,
         "model_runs_created": model_runs_created,
         "delay_seconds": 0,
