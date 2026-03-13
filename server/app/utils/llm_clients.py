@@ -308,9 +308,7 @@ def get_chatgpt_response(
                     tools=[{"type": "web_search_preview"}],
                 )
 
-                content, sources, metadata = _extract_openai_grounded_response(
-                    response
-                )
+                content, sources, metadata = _extract_openai_grounded_response(response)
 
                 return LLMResponse(
                     content=content,
@@ -902,7 +900,7 @@ def query_all_llms(
 if __name__ == "__main__":
     print(
         get_chatgpt_response(
-            "please give me hp laptops below 500 dollars that have 8gb ram and 512gb storage space",
-            True,
+            "please give me about 20 laptop choices below 500 dollars that have 32gb ram and 512gb storage space",
+            search=True,
         )
     )
