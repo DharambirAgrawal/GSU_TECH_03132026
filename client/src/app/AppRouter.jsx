@@ -11,7 +11,7 @@ import RunsPage from "../features/runs/pages/RunsPage";
 import VisibilityPage from "../features/visibility/pages/VisibilityPage";
 import AccuracyPage from "../features/accuracy/pages/AccuracyPage";
 import CompetitorsPage from "../features/competitors/pages/CompetitorsPage";
-import ActionsPage from "../features/actions/pages/ActionsPage";
+import ActionsPage from "../features/actions/ActionsPage";
 import CrawlPage from "../features/crawl/pages/CrawlPage";
 import EthicsPage from "../features/ethics/pages/EthicsPage";
 import QueryTesterPage from "../features/query-tester/pages/QueryTesterPage";
@@ -36,6 +36,7 @@ export default function AppRouter() {
         <Route path={ROUTES.visibility} element={<VisibilityPage />} />
         <Route path={ROUTES.accuracy} element={<AccuracyPage />} />
         <Route path={ROUTES.competitors} element={<CompetitorsPage />} />
+
         <Route path={ROUTES.actions} element={<ActionsPage />} />
         <Route path={ROUTES.crawl} element={<CrawlPage />} />
         <Route path={ROUTES.ethics} element={<EthicsPage />} />
