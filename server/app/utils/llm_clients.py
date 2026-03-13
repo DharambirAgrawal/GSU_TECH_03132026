@@ -1,133 +1,24 @@
-# app/utils/llm_clients.py
-# -----------------------------------------
-# Wrappers for calling OpenAI, Anthropic, and Google Gemini APIs.
-# All LLM calls in Vigil go through these wrappers so API keys,
-# retry logic, and error handling are in one place.
-#
-# IMPORTS NEEDED:
-#   import openai                                       # OpenAI SDK (pip install openai)
-#   import anthropic                                    # Anthropic SDK (pip install anthropic)
-#   import httpx                                        # For Perplexity API (REST API, no SDK)
-#   import os                                           # Read API keys from env vars
-#   import time                                         # For retry backoff sleep
-#   import logging
-#
-# ENVIRONMENT VARIABLES REQUIRED (set in .env):
-#   OPENAI_API_KEY      — for ChatGPT (gpt-4o)
-#   ANTHROPIC_API_KEY   — for Claude (claude-3-5-sonnet)
-#   PERPLEXITY_API_KEY  — for Perplexity (sonar-pro)
-#   GOOGLE_API_KEY      — for Gemini (gemini-1.5-pro)
-#
-# -----------------------------------------------------------
-# FUNCTION: get_chatgpt_response(query: str, temperature: float = 0.3) -> str
-# -----------------------------------------------------------
-# PURPOSE:
-#   Sends a query to OpenAI GPT-4o and returns the response text.
-#
-# IMPLEMENTATION:
-#   1. Initialize openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-#   2. Call client.chat.completions.create() with:
-#         model = "gpt-4o"
-#         messages = [
-#           { "role": "system", "content": "You are a helpful assistant." },
-#           { "role": "user", "content": query }
-#         ]
-#         temperature = temperature
-#         max_tokens = 1000
-#   3. Return response.choices[0].message.content
-#   4. On openai.RateLimitError: raise RateLimitError (caller handles retry)
-#   5. On any other exception: raise LLMClientError with platform="chatgpt"
-#
-# -----------------------------------------------------------
-# FUNCTION: get_claude_response(query: str, temperature: float = 0.3) -> str
-# -----------------------------------------------------------
-# PURPOSE:
-#   Sends a query to Anthropic Claude (claude-3-5-sonnet-20241022).
-#
-# IMPLEMENTATION:
-#   1. Initialize anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-#   2. Call client.messages.create() with:
-#         model = "claude-3-5-sonnet-20241022"
-#         max_tokens = 1000
-#         messages = [{ "role": "user", "content": query }]
-#   3. Return response.content[0].text
-#   4. On anthropic.RateLimitError: raise RateLimitError
-#
-# -----------------------------------------------------------
-# FUNCTION: get_perplexity_response(query: str) -> str
-# -----------------------------------------------------------
-# PURPOSE:
-#   Sends a query to Perplexity AI via their REST API.
-#   Perplexity is important because it's a search-augmented AI
-#   that is particularly influential in consumer queries.
-#
-# IMPLEMENTATION:
-#   Uses httpx to POST to https://api.perplexity.ai/chat/completions
-#   Headers: { "Authorization": f"Bearer {PERPLEXITY_API_KEY}" }
-#   Body: { "model": "sonar-pro", "messages": [...] }
-#   Parse JSON response and return message content string
-#
-# -----------------------------------------------------------
-# FUNCTION: get_gemini_response(query: str) -> str
-# -----------------------------------------------------------
-# PURPOSE:
-#   Sends a query to Google Gemini 1.5 Pro via the google-generativeai SDK.
-#
-# IMPORTS (inside function to keep optional):
-#   import google.generativeai as genai
-#
-# IMPLEMENTATION:
-#   1. genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
-#   2. model = genai.GenerativeModel("gemini-1.5-pro")
-#   3. response = model.generate_content(query)
-#   4. Return response.text
-#
-# -----------------------------------------------------------
-# CUSTOM EXCEPTIONS:
-#
-#   class RateLimitError(Exception):
-#       """Raised when any LLM API returns a rate limit error."""
-#       def __init__(self, platform: str):
-#           self.platform = platform
-#           super().__init__(f"Rate limit hit on {platform}")
-#
-#   class LLMClientError(Exception):
-#       """Raised for non-rate-limit errors from any LLM client."""
-#       def __init__(self, platform: str, original_error: Exception):
-#           self.platform = platform
-#           self.original_error = original_error
-#           super().__init__(f"LLM error on {platform}: {str(original_error)}")
-
-
-
-# app/utils/llm_clients.py
-# -----------------------------------------
-# Wrappers for calling OpenAI, Anthropic, Perplexity, and Google Gemini APIs.
-# All LLM calls in Vigil go through these wrappers so API keys,
-# retry logic, and error handling are in one place.
-#
-# Each function supports a `search` parameter:
-#   - search=False (default): Standard LLM completion (knowledge-based answer)
-#   - search=True: Instructs the LLM to perform web-grounded search,
-#     returning both the answer AND the ranked sources/citations so we
-#     can see what appeared in top positions (critical for brand visibility tracking).
-
-import openai
-import anthropic
-import httpx
+import json
+import logging
 import os
 import time
-import logging
-import json
-from typing import Optional
 from dataclasses import dataclass, field
+from typing import Optional
+
+import anthropic
+import httpx
+import openai
+from dotenv import load_dotenv
+from google import genai
 
 logger = logging.getLogger(__name__)
 
 
+load_dotenv()
 # ───────────────────────────────────────────
 # CUSTOM EXCEPTIONS
 # ───────────────────────────────────────────
+
 
 class RateLimitError(Exception):
     """Raised when any LLM API returns a rate limit error."""
@@ -150,6 +41,7 @@ class LLMClientError(Exception):
 # RESPONSE DATA CLASS
 # ───────────────────────────────────────────
 
+
 @dataclass
 class LLMResponse:
     """
@@ -166,6 +58,7 @@ class LLMResponse:
         search_enabled (bool): Whether search grounding was used.
         raw_response (any): The raw API response object for debugging.
     """
+
     content: str
     sources: list = field(default_factory=list)
     platform: str = ""
@@ -258,7 +151,7 @@ def _parse_sources_from_text(text: str) -> tuple[str, list[dict]]:
                         rank = int(rank_str)
                     except ValueError:
                         rank = None
-                    line = line[bracket_end + 1:].strip()
+                    line = line[bracket_end + 1 :].strip()
 
                 # Split by pipe: Title | URL | Snippet
                 pipe_parts = [p.strip() for p in line.split("|")]
@@ -283,6 +176,7 @@ def _parse_sources_from_text(text: str) -> tuple[str, list[dict]]:
 # FUNCTION: get_chatgpt_response
 # ───────────────────────────────────────────
 
+
 def get_chatgpt_response(
     query: str,
     temperature: float = 0.3,
@@ -302,7 +196,7 @@ def get_chatgpt_response(
 
     Args:
         query: The user query string.
-        temperature: Sampling temperature (0.0–1.0).
+        temperature: Sampling temperature (0.0-1.0).
         search: If True, enable web search grounding.
 
     Returns:
@@ -340,18 +234,29 @@ def get_chatgpt_response(
                                 content = content_block.text
 
                                 # Extract annotations (citations) from the response
-                                if hasattr(content_block, "annotations") and content_block.annotations:
+                                if (
+                                    hasattr(content_block, "annotations")
+                                    and content_block.annotations
+                                ):
                                     for annotation in content_block.annotations:
-                                        if hasattr(annotation, "url") and annotation.url:
+                                        if (
+                                            hasattr(annotation, "url")
+                                            and annotation.url
+                                        ):
                                             url = annotation.url
                                             if url not in seen_urls:
                                                 seen_urls.add(url)
-                                                sources.append({
-                                                    "rank": rank_counter,
-                                                    "title": getattr(annotation, "title", "") or "Untitled",
-                                                    "url": url,
-                                                    "snippet": "",
-                                                })
+                                                sources.append(
+                                                    {
+                                                        "rank": rank_counter,
+                                                        "title": getattr(
+                                                            annotation, "title", ""
+                                                        )
+                                                        or "Untitled",
+                                                        "url": url,
+                                                        "snippet": "",
+                                                    }
+                                                )
                                                 rank_counter += 1
 
                 return LLMResponse(
@@ -425,6 +330,7 @@ def get_chatgpt_response(
 # FUNCTION: get_claude_response
 # ───────────────────────────────────────────
 
+
 def get_claude_response(
     query: str,
     temperature: float = 0.3,
@@ -480,12 +386,14 @@ def get_claude_response(
                         # Claude's web search results contain search_results
                         if hasattr(block, "search_results"):
                             for result in block.search_results:
-                                sources.append({
-                                    "rank": rank_counter,
-                                    "title": getattr(result, "title", "Untitled"),
-                                    "url": getattr(result, "url", "N/A"),
-                                    "snippet": getattr(result, "snippet", ""),
-                                })
+                                sources.append(
+                                    {
+                                        "rank": rank_counter,
+                                        "title": getattr(result, "title", "Untitled"),
+                                        "url": getattr(result, "url", "N/A"),
+                                        "snippet": getattr(result, "snippet", ""),
+                                    }
+                                )
                                 rank_counter += 1
 
                 content = "\n".join(content_parts) if content_parts else ""
@@ -552,6 +460,7 @@ def get_claude_response(
 # ───────────────────────────────────────────
 # FUNCTION: get_perplexity_response
 # ───────────────────────────────────────────
+
 
 def get_perplexity_response(
     query: str,
@@ -645,20 +554,26 @@ def get_perplexity_response(
             for rank, citation in enumerate(citations, start=1):
                 if isinstance(citation, str):
                     # Simple URL string
-                    sources.append({
-                        "rank": rank,
-                        "title": f"Source {rank}",
-                        "url": citation,
-                        "snippet": "",
-                    })
+                    sources.append(
+                        {
+                            "rank": rank,
+                            "title": f"Source {rank}",
+                            "url": citation,
+                            "snippet": "",
+                        }
+                    )
                 elif isinstance(citation, dict):
                     # Rich citation object
-                    sources.append({
-                        "rank": rank,
-                        "title": citation.get("title", f"Source {rank}"),
-                        "url": citation.get("url", "N/A"),
-                        "snippet": citation.get("snippet", citation.get("text", "")),
-                    })
+                    sources.append(
+                        {
+                            "rank": rank,
+                            "title": citation.get("title", f"Source {rank}"),
+                            "url": citation.get("url", "N/A"),
+                            "snippet": citation.get(
+                                "snippet", citation.get("text", "")
+                            ),
+                        }
+                    )
 
             # If Perplexity didn't return structured citations but the content
             # has numbered references, try to extract them from the text
@@ -666,12 +581,14 @@ def get_perplexity_response(
                 # Check for search_results in response
                 search_results = data.get("search_results", [])
                 for rank, result in enumerate(search_results, start=1):
-                    sources.append({
-                        "rank": rank,
-                        "title": result.get("title", f"Source {rank}"),
-                        "url": result.get("url", "N/A"),
-                        "snippet": result.get("snippet", ""),
-                    })
+                    sources.append(
+                        {
+                            "rank": rank,
+                            "title": result.get("title", f"Source {rank}"),
+                            "url": result.get("url", "N/A"),
+                            "snippet": result.get("snippet", ""),
+                        }
+                    )
 
         return LLMResponse(
             content=content,
@@ -684,7 +601,9 @@ def get_perplexity_response(
     except RateLimitError:
         raise
     except httpx.HTTPStatusError as e:
-        logger.error(f"Perplexity HTTP error: {e.response.status_code} — {e.response.text}")
+        logger.error(
+            f"Perplexity HTTP error: {e.response.status_code} — {e.response.text}"
+        )
         raise LLMClientError(platform="perplexity", original_error=e)
     except (RateLimitError, LLMClientError):
         raise
@@ -693,27 +612,20 @@ def get_perplexity_response(
         raise LLMClientError(platform="perplexity", original_error=e)
 
 
-
 # ───────────────────────────────────────────
 # FUNCTION: get_gemini_response
 # ───────────────────────────────────────────
+
 
 def get_gemini_response(
     query: str,
     search: bool = False,
 ) -> LLMResponse:
     """
-    Sends a query to Google Gemini 1.5 Pro via the google-generativeai SDK.
+        Sends a query to Google Gemini 2.5 via the google-genai Client SDK.
 
-    When search=True:
-      - Enables Google Search grounding via the `google_search` tool,
-        which lets Gemini access real-time Google Search results.
-      - Parses grounding metadata from the response to extract ranked
-        source URLs, titles, and snippets.
-      - Falls back to prompt-based search if the grounding tool errors.
-
-    When search=False:
-      - Standard generation without search grounding.
+        When search=True, prompt-based source formatting is used so we can
+        parse ranked citations consistently across platforms.
 
     Args:
         query: The user query string.
@@ -727,144 +639,59 @@ def get_gemini_response(
         LLMClientError: For any other API error.
     """
     try:
-        import google.generativeai as genai
-    except ImportError:
-        raise LLMClientError(
-            platform="gemini",
-            original_error=ImportError(
-                "google-generativeai package not installed. "
-                "Run: pip install google-generativeai"
-            ),
+        gemini_client = genai.Client(
+            api_key=(GEMINI_API_KEY := os.environ["GEMINI_API_KEY"])
         )
 
-    try:
-        genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+        def _extract_text(response_obj: object) -> str:
+            text = getattr(response_obj, "text", None)
+            if isinstance(text, str) and text.strip():
+                return text.strip()
+
+            try:
+                candidate = response_obj.candidates[0]
+                parts = candidate.content.parts
+                joined = "".join(getattr(part, "text", "") for part in parts)
+                if joined.strip():
+                    return joined.strip()
+            except Exception:
+                pass
+
+            return ""
+
+        model_name = "gemini-2.5-flash"
 
         if search:
-            # ── Attempt 1: Use Gemini's native Google Search grounding ──
-            try:
-                from google.generativeai.types import Tool
-
-                # Create a model with Google Search as a tool
-                google_search_tool = Tool(
-                    google_search={}  # Empty dict enables default Google Search
-                )
-
-                model = genai.GenerativeModel(
-                    "gemini-1.5-pro",
-                    tools=[google_search_tool],
-                )
-
-                response = model.generate_content(query)
-
-                content = response.text
-                sources = []
-
-                # Extract grounding metadata if available
-                # The response may contain grounding_metadata with search results
-                if hasattr(response, "candidates") and response.candidates:
-                    candidate = response.candidates[0]
-
-                    # Check for grounding metadata
-                    grounding_metadata = getattr(candidate, "grounding_metadata", None)
-
-                    if grounding_metadata:
-                        # Extract grounding chunks (sources)
-                        grounding_chunks = getattr(
-                            grounding_metadata, "grounding_chunks", []
-                        )
-                        for rank, chunk in enumerate(grounding_chunks, start=1):
-                            web = getattr(chunk, "web", None)
-                            if web:
-                                sources.append({
-                                    "rank": rank,
-                                    "title": getattr(web, "title", f"Source {rank}"),
-                                    "url": getattr(web, "uri", "N/A"),
-                                    "snippet": "",
-                                })
-
-                        # Also check grounding_supports for snippet-level detail
-                        grounding_supports = getattr(
-                            grounding_metadata, "grounding_supports", []
-                        )
-                        for support in grounding_supports:
-                            segment = getattr(support, "segment", None)
-                            chunk_indices = getattr(
-                                support, "grounding_chunk_indices", []
-                            )
-                            snippet_text = getattr(segment, "text", "") if segment else ""
-
-                            # Attach snippets to their corresponding sources
-                            for idx in chunk_indices:
-                                if idx < len(sources) and snippet_text:
-                                    existing = sources[idx].get("snippet", "")
-                                    if existing:
-                                        sources[idx]["snippet"] = (
-                                            existing + " | " + snippet_text
-                                        )
-                                    else:
-                                        sources[idx]["snippet"] = snippet_text
-
-                        # Check for search_entry_point (rendered search results)
-                        search_entry = getattr(
-                            grounding_metadata, "search_entry_point", None
-                        )
-                        if search_entry and not sources:
-                            # If we got a search entry point but no structured chunks,
-                            # note it as a source
-                            rendered = getattr(
-                                search_entry, "rendered_content", ""
-                            )
-                            if rendered:
-                                sources.append({
-                                    "rank": 1,
-                                    "title": "Google Search Results",
-                                    "url": "https://www.google.com/search",
-                                    "snippet": "Search was performed but individual sources not extractable.",
-                                })
-
-                return LLMResponse(
-                    content=content,
-                    sources=sources,
-                    platform="gemini",
-                    search_enabled=True,
-                    raw_response=response,
-                )
-
-            except Exception as e:
-                logger.warning(
-                    f"Gemini Google Search grounding failed, "
-                    f"falling back to prompt-based search: {e}"
-                )
-
-            # ── Fallback: Prompt-based search ──
-            model = genai.GenerativeModel("gemini-1.5-pro")
             search_query = f"{SEARCH_SYSTEM_PROMPT}\n\nUser Query: {query}"
-            response = model.generate_content(search_query)
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=search_query,
+            )
 
-            raw_text = response.text
+            raw_text = _extract_text(response)
             answer, sources = _parse_sources_from_text(raw_text)
 
             return LLMResponse(
-                content=answer,
+                content=answer or raw_text,
                 sources=sources,
                 platform="gemini",
                 search_enabled=True,
                 raw_response=response,
             )
 
-        else:
-            # ── Standard (no search) generation ──
-            model = genai.GenerativeModel("gemini-1.5-pro")
-            response = model.generate_content(query)
+        response = gemini_client.models.generate_content(
+            model=model_name,
+            contents=query,
+        )
+        content = _extract_text(response)
 
-            return LLMResponse(
-                content=response.text,
-                sources=[],
-                platform="gemini",
-                search_enabled=False,
-                raw_response=response,
-            )
+        return LLMResponse(
+            content=content,
+            sources=[],
+            platform="gemini",
+            search_enabled=False,
+            raw_response=response,
+        )
 
     except (RateLimitError, LLMClientError):
         raise
@@ -880,6 +707,7 @@ def get_gemini_response(
 # ───────────────────────────────────────────
 # CONVENIENCE: query_all_llms
 # ───────────────────────────────────────────
+
 
 def query_all_llms(
     query: str,
@@ -960,3 +788,12 @@ def query_all_llms(
             )
 
     return results
+
+
+if __name__ == "__main__":
+    print(
+        get_gemini_response(
+            "please give me hp laptops below 500 dollars that have 8gb ram and 512gb storage space",
+            True,
+        )
+    )
