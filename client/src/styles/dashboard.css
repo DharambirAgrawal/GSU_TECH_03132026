@@ -795,6 +795,38 @@
    font-weight: 700;
 }
 
+.report-download-panel {
+   display: grid;
+   gap: 10px;
+   padding: 16px;
+   border-radius: 16px;
+   border: 1px solid rgba(226, 232, 240, 0.9);
+   background: rgba(255, 255, 255, 0.92);
+}
+
+.report-download-panel h3 {
+   margin: 0;
+   color: #1e1b4b;
+}
+
+.report-download-panel p {
+   margin: 0;
+   color: #64748b;
+   font-size: 14px;
+}
+
+.report-download-actions {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 10px;
+}
+
+.report-download-actions .btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+}
+
 .mention-grid,
 .issue-grid {
    display: grid;
