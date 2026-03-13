@@ -64,6 +64,10 @@ class DevelopmentConfig(Config):
     DEBUG: bool = True
     # SQLite file auto-created at server/instance/vigil_dev.db
     SQLALCHEMY_DATABASE_URI: str = os.getenv("DATABASE_URL", "sqlite:///vigil_dev.db")
+    # Dev convenience: create tables automatically if missing.
+    AUTO_CREATE_SCHEMA_ON_STARTUP: bool = True
+    # Optional hard reset for fresh local DB on each startup.
+    RESET_DB_ON_STARTUP: bool = os.getenv("RESET_DB_ON_STARTUP", "false").lower() == "true"
 
 
 class ProductionConfig(Config):

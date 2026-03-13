@@ -64,6 +64,15 @@ def create_app(config_name: str = "default") -> Flask:
             source,
         )
 
+        # Dev convenience mode:
+        # - AUTO_CREATE_SCHEMA_ON_STARTUP: create missing tables automatically.
+        # - RESET_DB_ON_STARTUP: drop and recreate all tables for a fresh local DB.
+        if app.config.get("RESET_DB_ON_STARTUP"):
+            db.drop_all()
+            db.create_all()
+        elif app.config.get("AUTO_CREATE_SCHEMA_ON_STARTUP"):
+            db.create_all()
+
         # --------------------------------------------------------------
         # Step 4 — Register all blueprints with their URL prefixes.
         #          Auth and runs are fully implemented.
