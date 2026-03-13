@@ -11,24 +11,9 @@ function StatCard({ title, value, sub, onClick, hoverDetails, color = "#6366f1" 
       role={onClick ? "button" : undefined}
       onClick={onClick}
       onKeyDown={onClick ? (e => (e.key === 'Enter' || e.key === ' ') && onClick()) : undefined}
-      style={{
-        cursor: onClick ? "pointer" : "default",
-        background: hovered ? "#f1f5f9" : "#fff",
-        boxShadow: hovered ? `0 8px 32px ${color}22` : "0 4px 24px rgba(79,70,229,0.10)",
-        border: `2px solid ${hovered ? color : '#e0e7ef'}`,
-        borderRadius: 16,
-        padding: 24,
-        minHeight: 120,
-        transition: 'all 0.18s',
-        position: 'relative',
-        outline: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        justifyContent: 'center',
-      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      style={{ position: 'relative' }} // Ensure positioning context for absolute hoverDetails
     >
       <div style={{ fontSize: 13, color: color, fontWeight: 700, marginBottom: 2 }}>{title}</div>
       <div style={{ fontSize: 32, fontWeight: 800, color: color, marginBottom: 2 }}>{value}</div>
@@ -36,8 +21,9 @@ function StatCard({ title, value, sub, onClick, hoverDetails, color = "#6366f1" 
       {hovered && hoverDetails && (
         <div style={{
           position: 'absolute',
-          left: 0,
+          left: '50%',
           top: '100%',
+          transform: 'translateX(-50%)',
           marginTop: 8,
           background: '#fff',
           border: `1.5px solid ${color}`,
@@ -48,6 +34,7 @@ function StatCard({ title, value, sub, onClick, hoverDetails, color = "#6366f1" 
           zIndex: 10,
           fontSize: 13,
           color: '#334155',
+          whiteSpace: 'normal',
         }}>
           {hoverDetails}
         </div>
@@ -60,38 +47,71 @@ export default function DashboardOverviewPage() {
   const { profile } = useOutletContext();
   const navigate = useNavigate();
 
+  // Example data for hover details
+  const accuracySpecs = (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <li>Errors found: {profile?.company?.accuracy_errors ?? 2}</li>
+      <li>Last audit: 2026-03-01</li>
+      <li>Top competitors: <b>Acme Corp</b>, <b>Globex Inc</b></li>
+    </ul>
+  );
+  const competitorsSpecs = (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <li>Error Type: Acme Corp (92)</li>
+      <li>Error Type: Globex Inc (87)</li>
+    </ul>
+  );
+  const visibilitySpecs = (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <li>Mentions: {profile?.company?.ai_visibility_score ?? 0}</li>
+      <li>Recent: 5 new this week</li>
+      <li>Sentiment: Positive</li>
+    </ul>
+  );
+
+  const actionsSpecs = (
+    <ul style={{ margin: 0, paddingLeft: 18 }}>
+      <li>Blocked by robots.txt: {profile?.company?.robots_blocked ? "Yes" : "No"}</li>
+      <li>Missing meta tags: {profile?.company?.missing_meta_tags ? "Yes" : "No"}</li>
+    </ul>
+  );
+
   return (
     <main>
       <section className="stats-grid dashboard-overview-grid">
-        
-        <article
-          className="stat stat-visibility stat-box"
-          tabIndex={0}
-          role="button"
-          onClick={() => navigate("/visibility")}
-          onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate("/visibility")}
-          style={{ cursor: "pointer" }}
-        >
-          <h2>Visibility</h2>
-          <ul className="overview-list">
-            <li>• Total mentions: <b>{profile?.company?.ai_visibility_score ?? 0}</b></li>
-            <li>• Sentiment analysis</li>
-            <li>• Platform breakdown</li>
-            <li>• Recent mention examples</li>
-          </ul>
-        </article>
-        <article className="stat stat-box">
-          <h2>Company Domain</h2>
-          <p>{profile?.company?.approved_email_domain || "-"}</p>
-        </article>
-        <article className="stat stat-box">
-          <h2>Role</h2>
-          <p>{profile?.user?.role || "member"}</p>
-        </article>
-        <article className="stat stat-box">
-          <h2>Accuracy Score</h2>
-          <p>{profile?.company?.accuracy_score ?? 0}</p>
-        </article>
+        <StatCard
+          title="Accuracy"
+          value={profile?.company?.accuracy_score ?? 78}
+          sub="Data accuracy score"
+          color="#22c55e"
+          onClick={() => navigate('/accuracy')}
+          hoverDetails={accuracySpecs}
+        />
+        <StatCard
+          title="Competitors"
+          value="5 tracked"
+          sub="Top 2 shown"
+          color="#6366f1"
+          onClick={() => navigate('/competitors')}
+          hoverDetails={competitorsSpecs}
+        />
+        <StatCard
+          title="Visibility"
+          value={profile?.company?.ai_visibility_score ?? 0}
+          sub="Mentions & sentiment"
+          color="#f59e42"
+          onClick={() => navigate('/visibility')}
+          hoverDetails={visibilitySpecs}
+        />
+
+        <StatCard
+          title="Action Items"
+          value={profile?.company?.actions_count ?? 0}
+          sub="Top 2 shown"
+          color="#C41E3A"
+          onClick={() => navigate('/actions')}
+          hoverDetails={competitorsSpecs}
+        />
       </section>
     </main>
   );
