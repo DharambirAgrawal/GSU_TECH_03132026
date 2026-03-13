@@ -12,9 +12,11 @@ def agentic_geo_automation(
     frontend_base_url: str,
 ) -> dict[str, object]:
     """Temporary automation placeholder used by Celery workers."""
-    delay_seconds = random.randint(10, 20)
-    time.sleep(delay_seconds)
-
+    #     def query_all_llms(
+    #     query: str,
+    #     search: bool = False,
+    #     platforms: Optional[list[str]] = None,
+    # ) -> dict[str, LLMResponse]:
     email_sent = False
     if recipient_email:
         login_url = f"{frontend_base_url.rstrip('/')}/login"
@@ -36,6 +38,5 @@ def agentic_geo_automation(
 
     return {
         "simulation_id": simulation_id,
-        "delay_seconds": delay_seconds,
         "email_sent": email_sent,
     }
