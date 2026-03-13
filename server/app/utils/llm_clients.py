@@ -696,9 +696,7 @@ def get_gemini_response(
         LLMClientError: For any other API error.
     """
     try:
-        gemini_client = genai.Client(
-            api_key=(GEMINI_API_KEY := os.environ["GEMINI_API_KEY"])
-        )
+        gemini_client = genai.Client(api_key=(os.environ["GEMINI_API_KEY"]))
 
         def _extract_text(response_obj: object) -> str:
             text = getattr(response_obj, "text", None)
@@ -900,7 +898,7 @@ def query_all_llms(
 if __name__ == "__main__":
     print(
         get_chatgpt_response(
-            "please give me about 20 laptop choices below 500 dollars that have 32gb ram and 512gb storage space",
+            "please give me about 20 laptop choices below 500 dollars that have 16gb ram and 512gb storage space",
             search=True,
         )
     )
