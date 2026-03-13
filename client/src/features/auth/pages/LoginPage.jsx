@@ -31,7 +31,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (getSessionToken()) {
-      navigate(ROUTES.login, { replace: true });
+      navigate(ROUTES.dashboard, { replace: true });
     }
   }, [navigate]);
 
@@ -65,16 +65,23 @@ export default function LoginPage() {
 
   return (
     <div className="login-page-outer">
-      
+      <button 
+        type="button" 
+        className="back-btn back-btn-centered" 
+        onClick={() => navigate(ROUTES.home)}
+      >
+        ← Back to Home
+      </button>
+
       <div className="login-logo-outer">
         <img src={vigilLogo} alt="Vigil Logo" className="login-logo-img" />
       </div>
+
       <AuthCard
-        title="Login with magic link" style={{ textAlign: "center" }}
-        subtitle="Use your company email. We’ll send a one-time secure login link."
+        title="Login with magic link"
+        subtitle="Use your company email. We'll send a one-time secure login link."
         hideTitle
       >
-
         <div className="form-section">
           <h3 className="form-section-title">Request Magic Link</h3>
           <form className="form" onSubmit={onSubmitMagicLink} style={{ marginBottom: 24 }}>
@@ -83,7 +90,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 value={email}
-                placeholder="dev.dharambir@amazon.com"
+                placeholder="you@company.com"
                 onChange={(event) => setEmail(event.target.value)}
                 required
               />
@@ -99,8 +106,8 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-        {/* <button className="btn btn-secondary" type="submit">Go to Dashboard</button> */}
-        <p className="route-cta" >
+
+        <p className="route-cta">
           Need to register first? <Link to={ROUTES.register} style={{ color: '#8219a2' }}>Register company</Link>
         </p>
       </AuthCard>

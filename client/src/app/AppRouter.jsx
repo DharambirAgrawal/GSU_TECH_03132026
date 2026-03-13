@@ -33,7 +33,6 @@ export default function AppRouter() {
         <Route path={ROUTES.accuracy} element={<AccuracyPage />} />
         <Route path={ROUTES.competitors} element={<CompetitorsPage />} />
         <Route path={ROUTES.actions} element={<ActionsPage />} />
-        <Route path={ROUTES.queryTester} element={<QueryTesterPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
