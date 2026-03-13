@@ -4,18 +4,8 @@
 # Flask-Migrate (Alembic) discovers tables by scanning imported models,
 # so any module not listed here will be missed by `flask db migrate`.
 
-from . import (
-    accuracy,
-    auth,
-    company,
-    competitor,
-    content,
-    crawl,
-    ethics,
-    query,
-    run_history,
-    source,
-)
+from . import auth, company, simulation
+
 #
 # IMPORTS NEEDED (import each module, not just the classes):
 #   from . import company
