@@ -744,29 +744,44 @@ def get_gemini_response(
 
                 if metadata:
                     # Extract web_search_queries used (clean list, not HTML)
-                    web_search_queries = getattr(metadata, "web_search_queries", None) or []
+                    web_search_queries = (
+                        getattr(metadata, "web_search_queries", None) or []
+                    )
                     grounding_meta["web_search_queries"] = list(web_search_queries)
 
                     # Build snippet map from grounding_supports
                     snippet_map: dict[int, list[str]] = {}
-                    if hasattr(metadata, "grounding_supports") and metadata.grounding_supports:
+                    if (
+                        hasattr(metadata, "grounding_supports")
+                        and metadata.grounding_supports
+                    ):
                         for support in metadata.grounding_supports:
-                            if hasattr(support, "segment") and hasattr(support.segment, "text"):
+                            if hasattr(support, "segment") and hasattr(
+                                support.segment, "text"
+                            ):
                                 seg_text = support.segment.text
-                                for idx in (getattr(support, "grounding_chunk_indices", []) or []):
+                                for idx in (
+                                    getattr(support, "grounding_chunk_indices", [])
+                                    or []
+                                ):
                                     snippet_map.setdefault(idx, [])
                                     if seg_text not in snippet_map[idx]:
                                         snippet_map[idx].append(seg_text)
 
                     # Build sources from grounding_chunks
-                    if hasattr(metadata, "grounding_chunks") and metadata.grounding_chunks:
+                    if (
+                        hasattr(metadata, "grounding_chunks")
+                        and metadata.grounding_chunks
+                    ):
                         for i, chunk in enumerate(metadata.grounding_chunks):
                             if hasattr(chunk, "web") and chunk.web:
                                 snippet_parts = snippet_map.get(i, [])
                                 sources.append(
                                     {
                                         "rank": len(sources) + 1,
-                                        "title": getattr(chunk.web, "title", "Untitled"),
+                                        "title": getattr(
+                                            chunk.web, "title", "Untitled"
+                                        ),
                                         "url": getattr(chunk.web, "uri", "N/A"),
                                         "snippet": " ... ".join(snippet_parts),
                                     }
