@@ -35,6 +35,17 @@ class CreateQueriesRequest(BaseModel):
         return value
 
 
+class CancelQueriesRequest(BaseModel):
+    simulation_id: str
+
+    @field_validator("simulation_id")
+    @classmethod
+    def simulation_id_not_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("simulation_id cannot be blank.")
+        return value.strip()
+
+
 def _parse_body(model_class):
     try:
         instance = model_class.model_validate(request.get_json(force=True) or {})
@@ -198,6 +209,42 @@ def get_queries(simulation_id: str):
                     }
                     for p in prompts
                 ],
+            }
+        ),
+        200,
+    )
+
+
+@bp.route("/queries/cancel", methods=["POST"])
+def cancel_queries():
+    """Cancel query generation result by deleting its simulation draft and prompts."""
+    try:
+        user, company = require_company_session(request)
+    except PermissionError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 401
+
+    body, err = _parse_body(CancelQueriesRequest)
+    if err:
+        return err
+
+    simulation = Simulation.query.filter_by(
+        id=body.simulation_id, company_id=company.id
+    ).first()
+
+    if simulation is None:
+        return jsonify({"success": False, "message": "Simulation not found."}), 404
+
+    deleted_prompt_count = len(simulation.prompts)
+    db.session.delete(simulation)
+    db.session.commit()
+
+    return (
+        jsonify(
+            {
+                "success": True,
+                "message": "Simulation cancelled and deleted.",
+                "simulation_id": body.simulation_id,
+                "deleted_prompt_count": deleted_prompt_count,
             }
         ),
         200,

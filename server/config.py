@@ -26,6 +26,18 @@ class Config:
     # ------------------------------------------------------------------
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
     SQLALCHEMY_TRACK_MODIFICATIONS: bool = False
+    CELERY = {
+        "broker_url": os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"),
+        "result_backend": os.getenv(
+            "CELERY_RESULT_BACKEND", "redis://localhost:6379/0"
+        ),
+        "task_ignore_result": True,
+        "task_serializer": "json",
+        "accept_content": ["json"],
+        "result_serializer": "json",
+        "timezone": "UTC",
+        "enable_utc": True,
+    }
 
     # ------------------------------------------------------------------
     # Auth settings
@@ -67,7 +79,9 @@ class DevelopmentConfig(Config):
     # Dev convenience: create tables automatically if missing.
     AUTO_CREATE_SCHEMA_ON_STARTUP: bool = True
     # Optional hard reset for fresh local DB on each startup.
-    RESET_DB_ON_STARTUP: bool = os.getenv("RESET_DB_ON_STARTUP", "false").lower() == "true"
+    RESET_DB_ON_STARTUP: bool = (
+        os.getenv("RESET_DB_ON_STARTUP", "false").lower() == "true"
+    )
 
 
 class ProductionConfig(Config):
@@ -92,6 +106,16 @@ class TestingConfig(Config):
     SESSION_TTL_HOURS: int = 1
     # Skip real email dispatch in tests
     ENABLE_THREAD_EXECUTOR: bool = False
+    CELERY = {
+        "broker_url": "memory://",
+        "result_backend": "cache+memory://",
+        "task_ignore_result": True,
+        "task_serializer": "json",
+        "accept_content": ["json"],
+        "result_serializer": "json",
+        "timezone": "UTC",
+        "enable_utc": True,
+    }
 
 
 # Registry — looked up by name in create_app(config_name)

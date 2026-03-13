@@ -1,38 +1,24 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from flask import Blueprint, jsonify, request
 from pydantic import BaseModel, ValidationError, field_validator
 
-from app.extensions import db
-from app.models.simulation import Prompt, Simulation
+from app.models.simulation import Simulation
 from app.services.auth_service import require_company_session
-from app.utils.query_generator import generate_queries
+from app.tasks.simulations import run_agentic_geo_automation
 
 bp = Blueprint("simulations", __name__)
 
 
-class CreateSimulationRequest(BaseModel):
-    product_specification: str
-    additional_detail: str | None = None
-    n_iteration: int
+class StartSimulationRequest(BaseModel):
+    selection_id: str
 
-    @field_validator("product_specification")
+    @field_validator("selection_id")
     @classmethod
-    def product_spec_not_blank(cls, value: str) -> str:
+    def selection_id_not_blank(cls, value: str) -> str:
         if not value or not value.strip():
-            raise ValueError("product_specification cannot be blank.")
+            raise ValueError("selection_id cannot be blank.")
         return value.strip()
-
-    @field_validator("n_iteration")
-    @classmethod
-    def n_iteration_positive(cls, value: int) -> int:
-        if value <= 0:
-            raise ValueError("n_iteration must be greater than 0.")
-        if value > 100:
-            raise ValueError("n_iteration must be 100 or less.")
-        return value
 
 
 def _parse_body(model_class):
@@ -43,190 +29,49 @@ def _parse_body(model_class):
         return None, (jsonify({"success": False, "errors": exc.errors()}), 400)
 
 
-def _fallback_prompt_texts(
-    product_specification: str, additional_detail: str | None, count: int
-) -> list[str]:
-    """Generate deterministic fallback prompts when company is not in query profiles."""
-    detail_suffix = (
-        f" considering {additional_detail.strip()}" if additional_detail else ""
-    )
-    base_templates = [
-        f"What are the best options for {product_specification}{detail_suffix}?",
-        f"Compare top providers for {product_specification}{detail_suffix}.",
-        f"What should I watch out for when choosing {product_specification}{detail_suffix}?",
-        f"Which company is most reliable for {product_specification}{detail_suffix}?",
-        f"What are common mistakes when buying {product_specification}{detail_suffix}?",
-    ]
-
-    prompts: list[str] = []
-    idx = 0
-    while len(prompts) < count:
-        template = base_templates[idx % len(base_templates)]
-        prompts.append(f"{template} (iteration {len(prompts) + 1})")
-        idx += 1
-    return prompts
-
-
 @bp.route("/simulations", methods=["POST"])
-def create_simulation():
-    """
-    Create a simulation and generated prompts.
-
-    Auth required via Bearer token.
-
-    Request body:
-      - product_specification (str)
-      - additional_detail (str, optional)
-      - n_iteration (int)
-    """
+def start_simulation():
+    """Trigger simulation processing in Celery for an existing selection."""
     try:
         user, company = require_company_session(request)
     except PermissionError as exc:
         return jsonify({"success": False, "message": str(exc)}), 401
 
-    body, err = _parse_body(CreateSimulationRequest)
+    body, err = _parse_body(StartSimulationRequest)
     if err:
         return err
 
-    now = datetime.now(timezone.utc)
-    simulation = Simulation(
-        company_id=company.id,
-        company_user_id=user.id,
-        time_started=now,
-        status="queued",
-        product_specification=body.product_specification,
-        n_iteration=body.n_iteration,
-        additional_detail=body.additional_detail,
-        about_company=company.about_company,
-        contact_email=user.email,
-        url=company.primary_domain,
-        time_created=now,
-    )
-
-    # Primary prompt generation path uses utils/query_generator profiles.
-    try:
-        generated = generate_queries(
-            company_name=company.name,
-            num_queries=body.n_iteration,
-        )
-        prompt_texts = [item.text for item in generated]
-    except Exception:
-        # Fallback keeps route functional for companies not yet in query profiles.
-        prompt_texts = _fallback_prompt_texts(
-            product_specification=body.product_specification,
-            additional_detail=body.additional_detail,
-            count=body.n_iteration,
-        )
-
-    db.session.add(simulation)
-    db.session.flush()
-
-    for index, prompt_text in enumerate(prompt_texts):
-        db.session.add(
-            Prompt(
-                simulation_id=simulation.id,
-                text=prompt_text,
-                prompt_order=index,
-            )
-        )
-
-    db.session.commit()
-
-    # Re-query prompts in order so IDs are included in the response.
-    saved_prompts = (
-        Prompt.query.filter_by(simulation_id=simulation.id)
-        .order_by(Prompt.prompt_order)
-        .all()
-    )
-
-    return (
-        jsonify(
-            {
-                "success": True,
-                "message": "Simulation created and prompts generated.",
-                "simulation_id": simulation.id,
-                "status": simulation.status,
-                "prompts": [
-                    {
-                        "id": p.id,
-                        "prompt_order": p.prompt_order,
-                        "text": p.text,
-                    }
-                    for p in saved_prompts
-                ],
-            }
-        ),
-        201,
-    )
-
-
-@bp.route("/simulations/<string:simulation_id>", methods=["GET"])
-def get_simulation(simulation_id: str):
-    """
-    Fetch a simulation and its prompts.
-
-    Auth required via Bearer token. The simulation must belong to the
-    authenticated user's company.
-    """
-    try:
-        user, company = require_company_session(request)
-    except PermissionError as exc:
-        return jsonify({"success": False, "message": str(exc)}), 401
-
     simulation = Simulation.query.filter_by(
-        id=simulation_id, company_id=company.id
+        id=body.selection_id,
+        company_id=company.id,
     ).first()
 
     if simulation is None:
         return jsonify({"success": False, "message": "Simulation not found."}), 404
 
-    prompts = (
-        Prompt.query.filter_by(simulation_id=simulation.id)
-        .order_by(Prompt.prompt_order)
-        .all()
-    )
+    simulation.status = "queued"
+
+    try:
+        async_result = run_agentic_geo_automation.delay(simulation.id)
+    except Exception:
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "message": "Failed to enqueue simulation processing.",
+                }
+            ),
+            500,
+        )
 
     return (
         jsonify(
             {
                 "success": True,
-                "simulation": {
-                    "id": simulation.id,
-                    "status": simulation.status,
-                    "product_specification": simulation.product_specification,
-                    "additional_detail": simulation.additional_detail,
-                    "n_iteration": simulation.n_iteration,
-                    "about_company": simulation.about_company,
-                    "contact_email": simulation.contact_email,
-                    "url": simulation.url,
-                    "time_started": (
-                        simulation.time_started.isoformat()
-                        if simulation.time_started
-                        else None
-                    ),
-                    "time_ended": (
-                        simulation.time_ended.isoformat()
-                        if simulation.time_ended
-                        else None
-                    ),
-                    "time_created": (
-                        simulation.time_created.isoformat()
-                        if simulation.time_created
-                        else None
-                    ),
-                },
-                "prompts": [
-                    {
-                        "id": p.id,
-                        "prompt_order": p.prompt_order,
-                        "text": p.text,
-                        "time_created": (
-                            p.time_created.isoformat() if p.time_created else None
-                        ),
-                    }
-                    for p in prompts
-                ],
+                "message": "Simulation started.",
+                "selection_id": simulation.id,
+                "task_id": async_result.id,
             }
         ),
-        200,
+        202,
     )
