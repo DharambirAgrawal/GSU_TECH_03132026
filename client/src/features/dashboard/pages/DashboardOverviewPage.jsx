@@ -47,6 +47,17 @@ export default function DashboardOverviewPage() {
   const { profile } = useOutletContext();
   const navigate = useNavigate();
 
+  // Get user's first name for greeting
+  const userName = profile?.user?.name?.split(" ")[0] || "there";
+  const companyName = profile?.company?.name || "your company";
+
+  // Example recent activity (replace with real data when backend is connected)
+  const recentActivity = [
+    { icon: "🔍", text: "Visibility score updated", time: "2 hours ago" },
+    { icon: "⚠️", text: "New error detected: Missing meta tags", time: "5 hours ago" },
+    { icon: "📈", text: "Competitor 'Acme Corp' rank changed", time: "1 day ago" },
+  ];
+
   // Example data for hover details
   const accuracySpecs = (
     <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -57,8 +68,8 @@ export default function DashboardOverviewPage() {
   );
   const competitorsSpecs = (
     <ul style={{ margin: 0, paddingLeft: 18 }}>
-      <li>Error Type: Acme Corp (92)</li>
-      <li>Error Type: Globex Inc (87)</li>
+      <li>Number 1: Acme Corp (92)</li>
+      <li>Number 2: Globex Inc (87)</li>
     </ul>
   );
   const visibilitySpecs = (
@@ -73,11 +84,27 @@ export default function DashboardOverviewPage() {
     <ul style={{ margin: 0, paddingLeft: 18 }}>
       <li>Blocked by robots.txt: {profile?.company?.robots_blocked ? "Yes" : "No"}</li>
       <li>Missing meta tags: {profile?.company?.missing_meta_tags ? "Yes" : "No"}</li>
+      <li>Error Type: Acme Corp (92)</li>
+      <li>Error Type: Globex Inc (87)</li>
     </ul>
   );
 
   return (
     <main>
+      {/* Welcome Banner */}
+      <section className="welcome-banner">
+        <div className="welcome-text">
+          <h1>Welcome back!! </h1>
+          <p>Here's what's happening with <b>{companyName}</b> today.</p>
+        </div>
+        <div className="welcome-cta">
+          <button className="btn btn-primary" onClick={() => navigate('/actions')}>
+            View Action Items
+          </button>
+        </div>
+      </section>
+
+      {/* Stat Cards */}
       <section className="stats-grid dashboard-overview-grid">
         <StatCard
           title="Accuracy"
@@ -103,15 +130,28 @@ export default function DashboardOverviewPage() {
           onClick={() => navigate('/visibility')}
           hoverDetails={visibilitySpecs}
         />
-
         <StatCard
           title="Action Items"
           value={profile?.company?.actions_count ?? 0}
           sub="Top 2 shown"
           color="#C41E3A"
           onClick={() => navigate('/actions')}
-          hoverDetails={competitorsSpecs}
+          hoverDetails={actionsSpecs}
         />
+      </section>
+
+      {/* Recent Activity */}
+      <section className="recent-activity-section">
+        <h2>Recent Activity</h2>
+        <ul className="recent-activity-list">
+          {recentActivity.map((item, idx) => (
+            <li key={idx} className="recent-activity-item">
+              <span className="activity-icon">{item.icon}</span>
+              <span className="activity-text">{item.text}</span>
+              <span className="activity-time">{item.time}</span>
+            </li>
+          ))}
+        </ul>
       </section>
     </main>
   );

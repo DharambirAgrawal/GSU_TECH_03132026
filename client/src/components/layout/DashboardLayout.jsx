@@ -9,6 +9,7 @@ import {
   setSessionToken,
 } from "../../services/session";
 import DashboardHeader from "./DashboardHeader";
+import vigilLogo from "../../assets/vigil_logopurple.png";
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -135,7 +136,9 @@ export default function DashboardLayout() {
   return (
     <main className="workspace-shell">
       <aside className="workspace-sidebar">
-        <p className="home-pill">Vigil Workspace</p>
+        <div className="sidebar-logo">
+          <img src={vigilLogo} alt="Vigil Logo" className="sidebar-logo-img" />
+        </div>
         <h2>{profile?.company?.name || "Company"}</h2>
         <p className="sidebar-subtext">{profile?.user?.email}</p>
 

@@ -4,6 +4,7 @@ import AuthCard from "../../../components/common/AuthCard";
 import { ROUTES } from "../../../app/paths";
 import { authApi } from "../../../services/authApi";
 import { getSessionToken, setSessionToken } from "../../../services/session";
+import vigilLogo from "../../../assets/vigil_logopurple.png";
 
 export default function LoginPage() {
   const location = useLocation();
@@ -66,7 +67,7 @@ export default function LoginPage() {
     <div className="login-page-outer">
       
       <div className="login-logo-outer">
-        <div className="login-logo">Vigil</div>
+        <img src={vigilLogo} alt="Vigil Logo" className="login-logo-img" />
       </div>
       <AuthCard
         title="Login with magic link" style={{ textAlign: "center" }}

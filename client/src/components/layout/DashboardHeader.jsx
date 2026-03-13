@@ -4,6 +4,9 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 	const [isModalOpen, setIsModalOpen] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
+	const [lastSimulationTime, setLastSimulationTime] = useState(
+		profile?.company?.last_simulation_at ? new Date(profile.company.last_simulation_at) : null
+	);
 	const [form, setForm] = useState({
 		product_specification: "",
 		additional_detail: "",
@@ -36,6 +39,7 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 				additional_detail: form.additional_detail.trim() || undefined,
 				n_iteration: Number(form.n_iteration),
 			});
+			setLastSimulationTime(new Date());
 			setIsModalOpen(false);
 		} catch (requestError) {
 			setError(requestError.message || "Failed to create simulation.");
@@ -71,9 +75,17 @@ export default function DashboardHeader({ profile, onGenerate, onCancelDraft, ha
 						Domain: {profile?.company?.approved_email_domain || "-"} · Role: {profile?.user?.role || "member"}
 					</p>
 				</div>
-				<button type="button" className="btn btn-primary" onClick={openModal}>
-					Create Simulation
-				</button>
+
+				<div className="header-actions">
+					<button type="button" className="btn btn-primary btn-pulse" onClick={openModal}>
+						Create Simulation
+					</button>
+					<p className="last-simulation-text">
+						Last simulation: {lastSimulationTime
+							? lastSimulationTime.toLocaleString()
+							: "None yet"}
+					</p>
+				</div>
 			</div>
 
 			{isModalOpen ? (
