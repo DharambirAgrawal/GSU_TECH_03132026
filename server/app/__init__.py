@@ -46,23 +46,10 @@ def create_app(config_name: str = "default") -> Flask:
     CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # ------------------------------------------------------------------
-    # Step 3 — Import ALL models so Flask-Migrate discovers every table.
-    #          If a model module is missing here, its table won't appear
-    #          in migrations. Order doesn't matter; just completeness.
+    # Step 3 — Import model modules so Flask-Migrate discovers tables.
     # ------------------------------------------------------------------
     with app.app_context():
-        from .models import (  # noqa: F401
-            accuracy,
-            auth,
-            company,
-            competitor,
-            content,
-            crawl,
-            ethics,
-            query,
-            run_history,
-            source,
-        )
+        from .models import auth, company, simulation  # noqa: F401
 
         # Dev convenience mode:
         # - AUTO_CREATE_SCHEMA_ON_STARTUP: create missing tables automatically.
@@ -74,32 +61,11 @@ def create_app(config_name: str = "default") -> Flask:
             db.create_all()
 
         # --------------------------------------------------------------
-        # Step 4 — Register all blueprints with their URL prefixes.
-        #          Auth and runs are fully implemented.
-        #          Analytics blueprints are stubbed (ready for future code).
+        # Step 4 — Register active blueprints.
         # --------------------------------------------------------------
-        from .routes.accuracy import bp as accuracy_bp
-        from .routes.actions import bp as actions_bp
         from .routes.auth import bp as auth_bp
-        from .routes.competitors import bp as competitors_bp
-        from .routes.crawl import bp as crawl_bp
-        from .routes.dashboard import bp as dashboard_bp
-        from .routes.ethics import bp as ethics_bp
-        from .routes.query_tester import bp as query_tester_bp
-        from .routes.runs import bp as runs_bp
-        from .routes.visibility import bp as visibility_bp
 
-        # Auth must be registered first — all other routes depend on it
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
-        app.register_blueprint(runs_bp, url_prefix="/api/runs")
-        app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
-        app.register_blueprint(visibility_bp, url_prefix="/api/visibility")
-        app.register_blueprint(accuracy_bp, url_prefix="/api/accuracy")
-        app.register_blueprint(competitors_bp, url_prefix="/api/competitors")
-        app.register_blueprint(actions_bp, url_prefix="/api/actions")
-        app.register_blueprint(crawl_bp, url_prefix="/api/crawl")
-        app.register_blueprint(query_tester_bp, url_prefix="/api/query-tester")
-        app.register_blueprint(ethics_bp, url_prefix="/api/ethics")
 
         # --------------------------------------------------------------
         # Step 5 — Health-check route (no auth needed)
@@ -111,6 +77,7 @@ def create_app(config_name: str = "default") -> Flask:
             return jsonify({"status": "ok", "env": config_name}), 200
 
     return app
+
 
 #
 # IMPORTS NEEDED:

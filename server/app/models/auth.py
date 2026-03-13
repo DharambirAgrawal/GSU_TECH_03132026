@@ -44,9 +44,13 @@ class CompanyUser(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     company = db.relationship("Company", back_populates="users")
-    magic_links = db.relationship("MagicLinkToken", back_populates="user", cascade="all, delete-orphan")
-    sessions = db.relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
-    created_runs = db.relationship("QueryBatchRun", back_populates="created_by")
+    magic_links = db.relationship(
+        "MagicLinkToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    sessions = db.relationship(
+        "UserSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    created_simulations = db.relationship("Simulation", back_populates="company_user")
 
 
 class MagicLinkToken(db.Model):
