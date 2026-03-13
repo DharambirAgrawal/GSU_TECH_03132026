@@ -2,9 +2,9 @@
 tests/test_simulations.py
 -----------------------------------------
 Validation tests for:
-  - CreateSimulationRequest Pydantic model
-  - Simulation / Prompt DB model constraints
-  - POST /simulations and GET /simulations/<id> routes
+    - CreateSimulationRequest Pydantic model
+    - Simulation / Prompt DB model constraints
+    - POST /api/agent/queries and GET /api/agent/queries/<id> routes
 """
 
 from __future__ import annotations
@@ -21,7 +21,8 @@ from app.extensions import db as _db
 from app.models.auth import CompanyUser
 from app.models.company import Company
 from app.models.simulation import Prompt, Simulation
-from app.routes.simulations import CreateSimulationRequest
+from app.routes.queries import CreateQueriesRequest
+from app.routes.simulations import StartSimulationRequest
 
 
 # ---------------------------------------------------------------------------
@@ -32,7 +33,7 @@ from app.routes.simulations import CreateSimulationRequest
 def _mock_auth(company: Company, user: CompanyUser):
     """Patch require_company_session to return the given (user, company) pair."""
     return patch(
-        "app.routes.simulations.require_company_session",
+        "app.routes.queries.require_company_session",
         return_value=(user, company),
     )
 
@@ -74,21 +75,19 @@ class _AppTestCase(unittest.TestCase):
 
 class TestCreateSimulationRequestValidation(unittest.TestCase):
     def test_valid_minimal_payload(self):
-        req = CreateSimulationRequest(
-            product_specification="cloud storage", n_iteration=5
-        )
+        req = CreateQueriesRequest(product_specification="cloud storage", n_iteration=5)
         self.assertEqual(req.product_specification, "cloud storage")
         self.assertEqual(req.n_iteration, 5)
         self.assertIsNone(req.additional_detail)
 
     def test_whitespace_stripped_from_product_specification(self):
-        req = CreateSimulationRequest(
+        req = CreateQueriesRequest(
             product_specification="  cloud storage  ", n_iteration=1
         )
         self.assertEqual(req.product_specification, "cloud storage")
 
     def test_optional_additional_detail(self):
-        req = CreateSimulationRequest(
+        req = CreateQueriesRequest(
             product_specification="laptop",
             additional_detail="focus on battery life",
             n_iteration=3,
@@ -97,42 +96,56 @@ class TestCreateSimulationRequestValidation(unittest.TestCase):
 
     def test_blank_product_specification_raises(self):
         with self.assertRaises(ValidationError) as ctx:
-            CreateSimulationRequest(product_specification="   ", n_iteration=5)
+            CreateQueriesRequest(product_specification="   ", n_iteration=5)
         self.assertIn("product_specification", str(ctx.exception))
 
     def test_empty_product_specification_raises(self):
         with self.assertRaises(ValidationError):
-            CreateSimulationRequest(product_specification="", n_iteration=5)
+            CreateQueriesRequest(product_specification="", n_iteration=5)
 
     def test_missing_product_specification_raises(self):
         with self.assertRaises(ValidationError):
-            CreateSimulationRequest(n_iteration=5)  # type: ignore[call-arg]
+            CreateQueriesRequest(n_iteration=5)  # type: ignore[call-arg]
 
     def test_n_iteration_zero_raises(self):
         with self.assertRaises(ValidationError) as ctx:
-            CreateSimulationRequest(product_specification="laptop", n_iteration=0)
+            CreateQueriesRequest(product_specification="laptop", n_iteration=0)
         self.assertIn("n_iteration", str(ctx.exception))
 
     def test_n_iteration_negative_raises(self):
         with self.assertRaises(ValidationError):
-            CreateSimulationRequest(product_specification="laptop", n_iteration=-5)
+            CreateQueriesRequest(product_specification="laptop", n_iteration=-5)
 
     def test_n_iteration_101_raises(self):
         with self.assertRaises(ValidationError) as ctx:
-            CreateSimulationRequest(product_specification="laptop", n_iteration=101)
+            CreateQueriesRequest(product_specification="laptop", n_iteration=101)
         self.assertIn("n_iteration", str(ctx.exception))
 
     def test_n_iteration_100_is_valid(self):
-        req = CreateSimulationRequest(product_specification="laptop", n_iteration=100)
+        req = CreateQueriesRequest(product_specification="laptop", n_iteration=100)
         self.assertEqual(req.n_iteration, 100)
 
     def test_n_iteration_1_is_valid(self):
-        req = CreateSimulationRequest(product_specification="laptop", n_iteration=1)
+        req = CreateQueriesRequest(product_specification="laptop", n_iteration=1)
         self.assertEqual(req.n_iteration, 1)
 
     def test_missing_n_iteration_raises(self):
         with self.assertRaises(ValidationError):
-            CreateSimulationRequest(product_specification="laptop")  # type: ignore[call-arg]
+            CreateQueriesRequest(product_specification="laptop")  # type: ignore[call-arg]
+
+
+class TestStartSimulationRequestValidation(unittest.TestCase):
+    def test_valid_selection_id(self):
+        req = StartSimulationRequest(selection_id="abc-123")
+        self.assertEqual(req.selection_id, "abc-123")
+
+    def test_blank_selection_id_raises(self):
+        with self.assertRaises(ValidationError):
+            StartSimulationRequest(selection_id="   ")
+
+    def test_missing_selection_id_raises(self):
+        with self.assertRaises(ValidationError):
+            StartSimulationRequest()  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------
@@ -247,18 +260,18 @@ class TestSimulationDbModel(_AppTestCase):
 
 
 # ---------------------------------------------------------------------------
-# 3. Route: POST /simulations
+# 3. Route: POST /api/agent/queries
 # ---------------------------------------------------------------------------
 
 
 class TestPostSimulationsRoute(_AppTestCase):
     def test_no_auth_returns_401(self):
         with patch(
-            "app.routes.simulations.require_company_session",
+            "app.routes.queries.require_company_session",
             side_effect=PermissionError("No session."),
         ):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps({"product_specification": "laptop", "n_iteration": 3}),
                 content_type="application/json",
             )
@@ -269,7 +282,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps({"n_iteration": 5}),
                 content_type="application/json",
             )
@@ -280,7 +293,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps({"product_specification": "  ", "n_iteration": 5}),
                 content_type="application/json",
             )
@@ -290,7 +303,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps({"product_specification": "laptop", "n_iteration": 0}),
                 content_type="application/json",
             )
@@ -300,7 +313,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps(
                     {"product_specification": "laptop", "n_iteration": 101}
                 ),
@@ -312,7 +325,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps(
                     {"product_specification": "enterprise laptop", "n_iteration": 3}
                 ),
@@ -321,8 +334,6 @@ class TestPostSimulationsRoute(_AppTestCase):
         self.assertEqual(response.status_code, 201)
         body = response.get_json()
         self.assertTrue(body["success"])
-        self.assertIn("simulation_id", body)
-        self.assertEqual(body["status"], "queued")
         self.assertIsInstance(body["prompts"], list)
         self.assertEqual(len(body["prompts"]), 3)
 
@@ -330,7 +341,7 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps(
                     {"product_specification": "cloud storage", "n_iteration": 5}
                 ),
@@ -342,34 +353,32 @@ class TestPostSimulationsRoute(_AppTestCase):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps(
                     {"product_specification": "security software", "n_iteration": 4}
                 ),
                 content_type="application/json",
             )
-        sim_id = response.get_json()["simulation_id"]
-        self.assertEqual(Prompt.query.filter_by(simulation_id=sim_id).count(), 4)
+        prompt_ids = [item["id"] for item in response.get_json()["prompts"]]
+        persisted_prompts = Prompt.query.filter(Prompt.id.in_(prompt_ids)).count()
+        self.assertEqual(persisted_prompts, 4)
 
     def test_simulation_persisted_to_db(self):
+        existing_count = Simulation.query.count()
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.post(
-                "/simulations",
+                "/api/agent/queries",
                 data=json.dumps(
                     {"product_specification": "network switch", "n_iteration": 2}
                 ),
                 content_type="application/json",
             )
-        sim_id = response.get_json()["simulation_id"]
-        sim = Simulation.query.get(sim_id)
-        self.assertIsNotNone(sim)
-        self.assertEqual(sim.product_specification, "network switch")
-        self.assertEqual(sim.company_id, company.id)
+        self.assertEqual(Simulation.query.count(), existing_count + 1)
 
 
 # ---------------------------------------------------------------------------
-# 4. Route: GET /simulations/<id>
+# 4. Route: GET /api/agent/queries/<id>
 # ---------------------------------------------------------------------------
 
 
@@ -393,37 +402,36 @@ class TestGetSimulationRoute(_AppTestCase):
 
     def test_no_auth_returns_401(self):
         with patch(
-            "app.routes.simulations.require_company_session",
+            "app.routes.queries.require_company_session",
             side_effect=PermissionError("No session."),
         ):
-            response = self.client.get("/simulations/nonexistent-id")
+            response = self.client.get("/api/agent/queries/nonexistent-id")
         self.assertEqual(response.status_code, 401)
 
     def test_unknown_id_returns_404(self):
         company, user = self._seed_company_and_user()
         with _mock_auth(company, user):
             response = self.client.get(
-                "/simulations/00000000-0000-0000-0000-000000000000"
+                "/api/agent/queries/00000000-0000-0000-0000-000000000000"
             )
         self.assertEqual(response.status_code, 404)
         self.assertFalse(response.get_json()["success"])
 
-    def test_returns_simulation_and_prompts(self):
+    def test_returns_prompts(self):
         company, user = self._seed_company_and_user()
         sim = self._create_simulation(company, user, n=3)
         with _mock_auth(company, user):
-            response = self.client.get(f"/simulations/{sim.id}")
+            response = self.client.get(f"/api/agent/queries/{sim.id}")
         self.assertEqual(response.status_code, 200)
         body = response.get_json()
         self.assertTrue(body["success"])
-        self.assertEqual(body["simulation"]["id"], sim.id)
         self.assertEqual(len(body["prompts"]), 3)
 
     def test_prompts_returned_in_order(self):
         company, user = self._seed_company_and_user()
         sim = self._create_simulation(company, user, n=5)
         with _mock_auth(company, user):
-            response = self.client.get(f"/simulations/{sim.id}")
+            response = self.client.get(f"/api/agent/queries/{sim.id}")
         orders = [p["prompt_order"] for p in response.get_json()["prompts"]]
         self.assertEqual(orders, sorted(orders))
 
@@ -445,8 +453,221 @@ class TestGetSimulationRoute(_AppTestCase):
         self.db.session.commit()
 
         with _mock_auth(other_company, other_user):
-            response = self.client.get(f"/simulations/{sim.id}")
+            response = self.client.get(f"/api/agent/queries/{sim.id}")
         self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# 5. Route: POST /api/agent/queries/cancel
+# ---------------------------------------------------------------------------
+
+
+class TestCancelQueriesRoute(_AppTestCase):
+    def _create_simulation(self, company, user, n=2):
+        sim = Simulation(
+            company_id=company.id,
+            company_user_id=user.id,
+            time_started=datetime.now(timezone.utc),
+            product_specification="cancel target",
+            n_iteration=n,
+        )
+        self.db.session.add(sim)
+        self.db.session.flush()
+        for i in range(n):
+            self.db.session.add(
+                Prompt(simulation_id=sim.id, text=f"Cancel Prompt {i}", prompt_order=i)
+            )
+        self.db.session.commit()
+        return sim
+
+    def test_no_auth_returns_401(self):
+        with patch(
+            "app.routes.queries.require_company_session",
+            side_effect=PermissionError("No session."),
+        ):
+            response = self.client.post(
+                "/api/agent/queries/cancel",
+                data=json.dumps(
+                    {"simulation_id": "00000000-0000-0000-0000-000000000000"}
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 401)
+
+    def test_missing_simulation_id_returns_400(self):
+        company, user = self._seed_company_and_user()
+        with _mock_auth(company, user):
+            response = self.client.post(
+                "/api/agent/queries/cancel",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_simulation_returns_404(self):
+        company, user = self._seed_company_and_user()
+        with _mock_auth(company, user):
+            response = self.client.post(
+                "/api/agent/queries/cancel",
+                data=json.dumps(
+                    {"simulation_id": "00000000-0000-0000-0000-000000000000"}
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_cancel_deletes_simulation_and_prompts(self):
+        company, user = self._seed_company_and_user()
+        sim = self._create_simulation(company, user, n=3)
+
+        with _mock_auth(company, user):
+            response = self.client.post(
+                "/api/agent/queries/cancel",
+                data=json.dumps({"simulation_id": sim.id}),
+                content_type="application/json",
+            )
+
+        body = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["simulation_id"], sim.id)
+        self.assertEqual(body["deleted_prompt_count"], 3)
+        self.assertIsNone(Simulation.query.get(sim.id))
+        self.assertEqual(Prompt.query.filter_by(simulation_id=sim.id).count(), 0)
+
+    def test_cross_company_cancel_returns_404(self):
+        company, user = self._seed_company_and_user()
+        sim = self._create_simulation(company, user, n=1)
+
+        other_company = Company(
+            name="Other Corp",
+            slug="other-corp",
+            primary_domain="https://other.example.com",
+        )
+        self.db.session.add(other_company)
+        self.db.session.flush()
+        other_user = CompanyUser(
+            company_id=other_company.id, email="user@other.example.com"
+        )
+        self.db.session.add(other_user)
+        self.db.session.commit()
+
+        with _mock_auth(other_company, other_user):
+            response = self.client.post(
+                "/api/agent/queries/cancel",
+                data=json.dumps({"simulation_id": sim.id}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# 6. Route: POST /api/agents/simulations
+# ---------------------------------------------------------------------------
+
+
+class TestStartSimulationsRoute(_AppTestCase):
+    def _create_simulation(self, company, user, n=2):
+        sim = Simulation(
+            company_id=company.id,
+            company_user_id=user.id,
+            time_started=datetime.now(timezone.utc),
+            status="queued",
+            product_specification="start target",
+            n_iteration=n,
+        )
+        self.db.session.add(sim)
+        self.db.session.flush()
+        for i in range(n):
+            self.db.session.add(
+                Prompt(simulation_id=sim.id, text=f"Start Prompt {i}", prompt_order=i)
+            )
+        self.db.session.commit()
+        return sim
+
+    def test_no_auth_returns_401(self):
+        with patch(
+            "app.routes.simulations.require_company_session",
+            side_effect=PermissionError("No session."),
+        ):
+            response = self.client.post(
+                "/api/agents/simulations",
+                data=json.dumps({"selection_id": "abc-123"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 401)
+
+    def test_missing_selection_id_returns_400(self):
+        company, user = self._seed_company_and_user()
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ):
+            response = self.client.post(
+                "/api/agents/simulations",
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_selection_id_returns_404(self):
+        company, user = self._seed_company_and_user()
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ):
+            response = self.client.post(
+                "/api/agents/simulations",
+                data=json.dumps(
+                    {"selection_id": "00000000-0000-0000-0000-000000000000"}
+                ),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 404)
+
+    def test_success_queues_celery_task(self):
+        company, user = self._seed_company_and_user()
+        sim = self._create_simulation(company, user, n=2)
+
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ), patch(
+            "app.routes.simulations.run_agentic_geo_automation.delay"
+        ) as mock_delay:
+            mock_delay.return_value.id = "task-sim-001"
+            response = self.client.post(
+                "/api/agents/simulations",
+                data=json.dumps({"selection_id": sim.id}),
+                content_type="application/json",
+            )
+
+        body = response.get_json()
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(body["success"])
+        self.assertEqual(body["selection_id"], sim.id)
+        self.assertEqual(body["task_id"], "task-sim-001")
+        mock_delay.assert_called_once_with(sim.id)
+
+    def test_queue_failure_returns_500(self):
+        company, user = self._seed_company_and_user()
+        sim = self._create_simulation(company, user, n=1)
+
+        with patch(
+            "app.routes.simulations.require_company_session",
+            return_value=(user, company),
+        ), patch(
+            "app.routes.simulations.run_agentic_geo_automation.delay",
+            side_effect=RuntimeError("broker down"),
+        ):
+            response = self.client.post(
+                "/api/agents/simulations",
+                data=json.dumps({"selection_id": sim.id}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(response.get_json()["success"])
 
 
 if __name__ == "__main__":

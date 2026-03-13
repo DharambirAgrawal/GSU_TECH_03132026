@@ -5,6 +5,7 @@ Flask-Migrate
 pydantic[email]
 python-dotenv
 requests
+celery
 httpx
 beautifulsoup4
 openai

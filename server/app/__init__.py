@@ -14,6 +14,7 @@ from flask import Flask
 from flask_cors import CORS
 
 from config import config
+from .celery_app import init_celery
 
 
 def create_app(config_name: str = "default") -> Flask:
@@ -41,6 +42,7 @@ def create_app(config_name: str = "default") -> Flask:
 
     db.init_app(app)
     migrate.init_app(app, db)
+    init_celery(app)
 
     # Allow cross-origin requests from the React frontend
     CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -64,10 +66,12 @@ def create_app(config_name: str = "default") -> Flask:
         # Step 4 — Register active blueprints.
         # --------------------------------------------------------------
         from .routes.auth import bp as auth_bp
+        from .routes.queries import bp as queries_bp
         from .routes.simulations import bp as simulations_bp
 
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
-        app.register_blueprint(simulations_bp)
+        app.register_blueprint(queries_bp, url_prefix="/api/agent")
+        app.register_blueprint(simulations_bp, url_prefix="/api/agents")
 
         # --------------------------------------------------------------
         # Step 5 — Health-check route (no auth needed)

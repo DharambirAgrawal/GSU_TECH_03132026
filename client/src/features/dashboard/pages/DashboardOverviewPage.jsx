@@ -1,4 +1,5 @@
 import { useOutletContext, useNavigate } from "react-router-dom";
+<<<<<<< HEAD
 import { useState } from "react";
 import "../../../styles/dashboard.css";
 
@@ -55,18 +56,14 @@ function StatCard({ title, value, sub, onClick, hoverDetails, color = "#6366f1" 
     </div>
   );
 }
+=======
+>>>>>>> 9d0f09da1b49760ef77d5065bd6dbc5985f66150
 
 export default function DashboardOverviewPage() {
   const { profile } = useOutletContext();
-  const [selectedProduct, setSelectedProduct] = useState("");
-  const [showCustomInput, setShowCustomInput] = useState(false);
-  const [customProduct, setCustomProduct] = useState("");
-  const [showProductModal, setShowProductModal] = useState(true);
-  const [productInput, setProductInput] = useState("");
-  const [reasonInput, setReasonInput] = useState("");
-  const productOptions = ["Product A", "Product B", "Product C"];
   const navigate = useNavigate();
 
+<<<<<<< HEAD
   // Check localStorage for first-time user
   const [isFirstVisit, setIsFirstVisit] = useState(() => {
     return localStorage.getItem('hasVisitedDashboard') !== 'true';
@@ -155,6 +152,40 @@ export default function DashboardOverviewPage() {
           onClick={() => navigate('/visibility')}
           hoverDetails={visibilitySpecs}
         />
+=======
+  return (
+    <main>
+      <section className="stats-grid dashboard-overview-grid">
+        
+        <article
+          className="stat stat-visibility stat-box"
+          tabIndex={0}
+          role="button"
+          onClick={() => navigate("/visibility")}
+          onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && navigate("/visibility")}
+          style={{ cursor: "pointer" }}
+        >
+          <h2>Visibility</h2>
+          <ul className="overview-list">
+            <li>• Total mentions: <b>{profile?.company?.ai_visibility_score ?? 0}</b></li>
+            <li>• Sentiment analysis</li>
+            <li>• Platform breakdown</li>
+            <li>• Recent mention examples</li>
+          </ul>
+        </article>
+        <article className="stat stat-box">
+          <h2>Company Domain</h2>
+          <p>{profile?.company?.approved_email_domain || "-"}</p>
+        </article>
+        <article className="stat stat-box">
+          <h2>Role</h2>
+          <p>{profile?.user?.role || "member"}</p>
+        </article>
+        <article className="stat stat-box">
+          <h2>Accuracy Score</h2>
+          <p>{profile?.company?.accuracy_score ?? 0}</p>
+        </article>
+>>>>>>> 9d0f09da1b49760ef77d5065bd6dbc5985f66150
       </section>
     </main>
   );
