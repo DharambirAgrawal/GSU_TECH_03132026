@@ -777,15 +777,6 @@ def get_gemini_response(
             except Exception as e:
                 logger.warning(f"Error extracting Gemini grounding metadata: {e}")
 
-            # Append a clean Markdown sources section to the response content
-            if sources:
-                md_sources = "\n\n---\n\n## Sources\n"
-                for src in sources:
-                    md_sources += f"\n[{src['rank']}] **{src['title']}** — <{src['url']}>"
-                    if src.get("snippet"):
-                        md_sources += f"\n> {src['snippet'][:200]}"
-                raw_text = raw_text + md_sources
-
             return LLMResponse(
                 content=raw_text,
                 sources=sources,
@@ -909,7 +900,7 @@ def query_all_llms(
 if __name__ == "__main__":
     print(
         get_gemini_response(
-            "who won the 2024 super bowl?",
+            "please give me about 20 laptop choices below 500 dollars that have 16gb ram and 512gb storage space",
             search=True,
         )
     )
