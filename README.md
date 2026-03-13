@@ -1,20 +1,52 @@
 # GSU_TECH_03132026
 
-This project contains a client and a server application.
+This project contains a Vite React client and a Flask backend.
 
-## Running with Docker
+## One-command local run (Docker)
 
-To run the entire system with Docker, make sure you have Docker and Docker Compose installed.
+1. Create a root `.env` file (you can copy from `server/.env.template`).
+2. Start the full app:
 
-1.  **Create a `.env` file** in the root of the project and populate it with the necessary environment variables. You can use the `.env.template` file in the `server` directory as a reference.
+```bash
+docker compose up --build
+```
 
-2.  **Run the application** using Docker Compose:
+App URLs:
+- Client: http://localhost:5173
+- API: http://localhost:5000
 
-    ```bash
-    docker-compose up --build
-    ```
+Stop:
 
-This will build the Docker images for the client and server and start the services.
+```bash
+docker compose down
+```
 
-*   The client will be available at [http://localhost:5173](http://localhost:5173)
-*   The server will be available at [http://localhost:5000](http://localhost:5000)
+## Deploy to Render
+
+This repo now includes a Render Blueprint file: `render.yaml`.
+
+### Quick deploy
+
+1. Push this repo to GitHub.
+2. In Render, choose **New +** → **Blueprint**.
+3. Select this repository.
+4. Render creates:
+   - `vigil-api` (Python web service)
+   - `vigil-client` (static site)
+
+### Environment variables to set in Render
+
+For `vigil-api`:
+- `SECRET_KEY` (required)
+- `DATABASE_URL` (required for production DB)
+- `FRONTEND_BASE_URL` (set to your `vigil-client` URL)
+- `BACKEND_BASE_URL` (set to your `vigil-api` URL)
+- API keys used by your app (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, etc.)
+
+For `vigil-client`:
+- `VITE_API_BASE_URL` should point to your API public URL
+
+## Notes
+
+- Render does not run `docker-compose.yml` directly in production; use `render.yaml` for deployment orchestration.
+- Local development remains one command with Docker Compose.
