@@ -1,6 +1,10 @@
 # app/routes/ethics.py
 # -----------------------------------------
 # Blueprint for ethics and compliance monitoring endpoints.
+from flask import Blueprint
+
+bp = Blueprint("ethics", __name__)
+
 # Registered in create_app() at URL prefix: /api/ethics
 #
 # IMPORTS NEEDED:

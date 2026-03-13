@@ -1,9 +1,24 @@
 # app/extensions.py
 # -----------------------------------------
 # Single shared instances of Flask extensions.
-# These are created HERE (not inside the app factory) so that
-# models can import `db` without causing circular imports.
-# The actual app is bound to them later via db.init_app(app) in create_app().
+#
+# These are created at module level so models can do:
+#   from app.extensions import db
+# without causing circular imports.
+#
+# The actual Flask app is bound later in create_app() via:
+#   db.init_app(app)
+#   migrate.init_app(app, db)
+
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+
+# ORM instance — all models inherit from db.Model
+db = SQLAlchemy()
+
+# Database migration manager (Alembic wrapper)
+# CLI: flask db init / flask db migrate / flask db upgrade
+migrate = Migrate()
 #
 # IMPORTS NEEDED:
 #   from flask_sqlalchemy import SQLAlchemy

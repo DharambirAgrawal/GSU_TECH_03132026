@@ -1,6 +1,10 @@
 # app/routes/dashboard.py
 # -----------------------------------------
 # Blueprint for the main dashboard overview endpoints.
+from flask import Blueprint
+
+bp = Blueprint("dashboard", __name__)
+
 # Registered in create_app() at URL prefix: /api/dashboard
 #
 # IMPORTS NEEDED:

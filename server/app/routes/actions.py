@@ -1,6 +1,10 @@
 # app/routes/actions.py
 # -----------------------------------------
 # Blueprint for the Action Center — content fix queue management.
+from flask import Blueprint
+
+bp = Blueprint("actions", __name__)
+
 # Registered in create_app() at URL prefix: /api/actions
 #
 # IMPORTS NEEDED:

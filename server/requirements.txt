@@ -2,7 +2,7 @@ Flask
 Flask-Cors
 Flask-SQLAlchemy
 Flask-Migrate
-pydantic
+pydantic[email]
 python-dotenv
 requests
 httpx

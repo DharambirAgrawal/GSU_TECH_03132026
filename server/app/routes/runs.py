@@ -1,6 +1,10 @@
 # app/routes/runs.py
 # -----------------------------------------
 # Blueprint for user-triggered run lifecycle:
+from flask import Blueprint
+
+bp = Blueprint("runs", __name__)
+
 # generate prompts -> optional edit -> start async run -> poll progress.
 # Registered in create_app() at URL prefix: /api/runs
 #

@@ -1,6 +1,10 @@
 # app/routes/competitors.py
 # -----------------------------------------
 # Blueprint for competitor tracking and ranking endpoints.
+from flask import Blueprint
+
+bp = Blueprint("competitors", __name__)
+
 # Registered in create_app() at URL prefix: /api/competitors
 #
 # IMPORTS NEEDED:

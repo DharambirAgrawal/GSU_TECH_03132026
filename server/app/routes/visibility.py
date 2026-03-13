@@ -1,6 +1,10 @@
 # app/routes/visibility.py
 # -----------------------------------------
 # Blueprint for brand visibility metrics endpoints.
+from flask import Blueprint
+
+bp = Blueprint("visibility", __name__)
+
 # Registered in create_app() at URL prefix: /api/visibility
 #
 # IMPORTS NEEDED:
