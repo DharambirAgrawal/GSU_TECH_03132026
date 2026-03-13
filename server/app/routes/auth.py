@@ -21,6 +21,8 @@ Endpoints:
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from flask import Blueprint, jsonify, redirect, request
 from pydantic import BaseModel, EmailStr, ValidationError, field_validator
 
@@ -297,10 +299,10 @@ def verify_magic_link_redirect():
     from flask import current_app
 
     raw_token = request.args.get("token", "").strip()
-    frontend_url = current_app.config.get("FRONTEND_BASE_URL", "http://localhost:3000")
+    frontend_url = current_app.config.get("FRONTEND_BASE_URL", "http://localhost:5173")
 
     if not raw_token:
-        return redirect(f"{frontend_url}/login?error=missing_token")
+        return redirect(f"{frontend_url}/login?{urlencode({'error': 'missing_token'})}")
 
     try:
         result = verify_magic_link_and_create_session(raw_token, _request_meta())
@@ -312,7 +314,7 @@ def verify_magic_link_redirect():
             "Token has already been used.": "token_used",
         }
         slug = error_map.get(str(e), "auth_error")
-        return redirect(f"{frontend_url}/login?error={slug}")
+        return redirect(f"{frontend_url}/login?{urlencode({'error': slug})}")
 
     # Success — carry session token and basic user info to the frontend via URL.
     # Frontend must read these params on /dashboard load, store the token,
@@ -321,56 +323,14 @@ def verify_magic_link_redirect():
     user_email = result["user"]["email"]
     company_name = result["company"]["name"]
 
-    # In development: show an HTML debug page instead of redirecting to the
-    # frontend (which may not be running yet). This lets you copy the session
-    # token and test protected endpoints immediately.
-    if current_app.config.get("DEBUG"):
-        from flask import make_response
-        dashboard_url = (
-            f"{frontend_url}/dashboard"
-            f"?session_token={session_token}"
-            f"&email={user_email}"
-            f"&company={company_name}"
-        )
-        html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <title>Vigil — Login Successful (Dev Mode)</title>
-  <style>
-    body {{ font-family: monospace; max-width: 700px; margin: 60px auto; padding: 0 20px; background: #0f0f0f; color: #e0e0e0; }}
-    h2 {{ color: #4ade80; }}
-    .token {{ background: #1a1a1a; border: 1px solid #333; padding: 16px; border-radius: 6px; word-break: break-all; font-size: 13px; }}
-    .label {{ color: #888; font-size: 12px; margin-bottom: 6px; }}
-    .note {{ color: #facc15; margin-top: 24px; font-size: 13px; line-height: 1.6; }}
-    .copy-btn {{ background: #4ade80; color: #000; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: monospace; font-size: 13px; margin-top: 12px; }}
-    hr {{ border-color: #333; margin: 24px 0; }}
-    code {{ background: #1a1a1a; padding: 2px 6px; border-radius: 3px; }}
-  </style>
-</head>
-<body>
-  <h2>✓ Login successful</h2>
-  <p>Authenticated as <strong>{user_email}</strong> &nbsp;·&nbsp; Company: <strong>{company_name}</strong></p>
-  <hr>
-  <div class="label">SESSION TOKEN (copy this for API testing)</div>
-  <div class="token" id="token">{session_token}</div>
-  <button class="copy-btn" onclick="navigator.clipboard.writeText(document.getElementById('token').innerText); this.innerText='Copied!'">Copy Token</button>
-  <hr>
-  <div class="label">Test a protected endpoint with this token:</div>
-  <div class="token">curl http://localhost:5000/api/auth/me \\<br>&nbsp;&nbsp;-H "Authorization: Bearer {session_token}"</div>
-  <div class="note">
-    ⚠️ This page is shown in development mode only (DEBUG=True).<br>
-    In production, this redirects to: <code>{dashboard_url}</code>
-  </div>
-</body>
-</html>"""
-        return make_response(html, 200)
-
-    # Production: redirect to frontend dashboard
+    # Redirect to frontend dashboard after successful verification.
+    query = urlencode({
+        "session_token": session_token,
+        "email": user_email,
+        "company": company_name,
+    })
     return redirect(
-        f"{frontend_url}/dashboard"
-        f"?session_token={session_token}"
-        f"&email={user_email}"
-        f"&company={company_name}"
+        f"{frontend_url}/dashboard?{query}"
     )
 
 

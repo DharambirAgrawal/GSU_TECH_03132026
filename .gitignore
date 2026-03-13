@@ -207,3 +207,19 @@ marimo/_lsp/
 __marimo__/
 
 .env
+
+
+# For react
+
+node_modules/
+dist
+build
+.DS_Store
+*.log
+*.env
+*.env.local
+*.env.development
+*.env.test
+*.env.production
+__pycache__/
+*.py[codz]
