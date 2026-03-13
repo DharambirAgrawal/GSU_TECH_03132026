@@ -1,6 +1,10 @@
 # app/routes/accuracy.py
 # -----------------------------------------
 # Blueprint for accuracy and fact-checking endpoints.
+from flask import Blueprint
+
+bp = Blueprint("accuracy", __name__)
+
 # Registered in create_app() at URL prefix: /api/accuracy
 #
 # IMPORTS NEEDED:

@@ -1,6 +1,10 @@
 # app/routes/crawl.py
 # -----------------------------------------
 # Blueprint for website crawl and readability audit endpoints.
+from flask import Blueprint
+
+bp = Blueprint("crawl", __name__)
+
 # Registered in create_app() at URL prefix: /api/crawl
 #
 # IMPORTS NEEDED:

@@ -1,6 +1,10 @@
 # app/routes/query_tester.py
 # -----------------------------------------
 # Blueprint for low-level query simulation endpoints.
+from flask import Blueprint
+
+bp = Blueprint("query_tester", __name__)
+
 # This module remains useful for direct ad-hoc tests, while the
 # primary frontend flow now uses /api/runs for async batch execution
 # and history tracking.

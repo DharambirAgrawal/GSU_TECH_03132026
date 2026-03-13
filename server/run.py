@@ -1,7 +1,26 @@
 # run.py
 # -----------------------------------------
 # Entry point for the Vigil Flask application.
-# Run this file directly with: python run.py
+#
+# Development:
+#   python run.py
+#
+# Production (gunicorn):
+#   gunicorn "app:create_app('production')" --bind 0.0.0.0:5000 --workers 4
+
+import os
+
+from app import create_app
+
+# Read FLASK_ENV from environment; default to development
+env = os.getenv("FLASK_ENV", "development")
+app = create_app(env)
+
+if __name__ == "__main__":
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 5000))
+    # debug=True enables auto-reload on code changes (dev only)
+    app.run(host=host, port=port, debug=(env == "development"), use_reloader=True)
 #
 # IMPORTS NEEDED:
 #   from app import create_app        # The app factory function

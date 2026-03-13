@@ -1,8 +1,21 @@
 # app/models/__init__.py
 # -----------------------------------------
-# Imports all model modules so that Flask-Migrate (Alembic) can discover
-# every table when running `flask db migrate`.
-# If a model module is NOT imported here, its table will be invisible to migrations.
+# Import every model module here.
+# Flask-Migrate (Alembic) discovers tables by scanning imported models,
+# so any module not listed here will be missed by `flask db migrate`.
+
+from . import (
+    accuracy,
+    auth,
+    company,
+    competitor,
+    content,
+    crawl,
+    ethics,
+    query,
+    run_history,
+    source,
+)
 #
 # IMPORTS NEEDED (import each module, not just the classes):
 #   from . import company
