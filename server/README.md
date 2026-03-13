@@ -1,296 +1,182 @@
-# VIGIL Backend — Manual Run + Company-Domain Magic Link Architecture
+# GEO Simulation Backend
 
-## Stack
-- Flask API
-- SQLAlchemy ORM + Flask-Migrate
-- SQLite for development (PostgreSQL-ready)
-- Pydantic for request validation
-- LLM clients (OpenAI / Anthropic / others)
+Simple backend for running AI visibility simulations for a company.
 
----
-
-## 1) Product Flow (Updated)
-
-This backend is now **manual-run driven**.
-
-There are **no daily/weekly scheduler automations** that run the entire app globally.
-Everything starts only when an authenticated company user clicks from frontend.
-
-### End-to-end flow
-1. Company registers with:
-   - company name
-   - company URL
-   - about company (optional)
-2. Backend extracts and auto-approves company login domain (for now).
-   - Example: `amazon.com`
-3. Any user with `*@amazon.com` can request a magic link.
-4. User clicks magic link, receives session, and opens company dashboard.
-5. User chooses topic + number of prompts (e.g., 50), edits any prompts, then clicks Start.
-6. Backend immediately accepts request, enqueues async run, and returns success.
-7. Run executes in background and creates a history entry.
-8. All users in same company see the same dashboard + same run history.
+It lets a company:
+- register and log in with magic link auth
+- generate a list of prompts for a simulation
+- start async simulation runs across multiple LLMs
+- store citations, errors, and fact-check results
+- view dashboard/metrics data
+- generate a department-specific PDF report
 
 ---
 
-## 2) Multi-tenant Access Model
+## 1) Tech Stack
 
-Tenant model is **company-scoped**, not user-scoped.
-
-- Company is the data boundary.
-- Many users can belong to one company.
-- Access is granted by email domain allowlist.
-- Dashboard state and history are shared for all users in that company.
-
-### Example
-- Allowed domain: `ebay.com`
-- `user1@ebay.com`, `ops@ebay.com`, `leader@ebay.com`
-- All authenticate into the **same company dashboard** and view same run history.
+- Python + Flask
+- SQLAlchemy + Flask-Migrate
+- SQLite in development
+- Celery for async jobs (with local thread fallback)
+- LLM clients: OpenAI, Anthropic, Perplexity, Gemini
+- ReportLab for PDF generation
 
 ---
 
-## 3) Authentication (Magic Link)
+## 2) How the App Works
 
-### Registration
-`POST /api/auth/register-company`
-
-Input:
-- `company_name`
-- `company_url`
-- `about_company` (optional)
-- `contact_email`
-
-Backend actions:
-- Creates `Company`
-- Creates primary `CompanyDomain`
-- Creates/updates `CompanyConfig`
-- Creates initial `CompanyUser` (owner)
-
-### Request link
-`POST /api/auth/request-magic-link`
-
-Input:
-- `email`
-
-Backend actions:
-- Verifies email domain is allowed
-- Creates one-time token (`MagicLinkToken`)
-- Sends link via email provider
-
-### Verify link
-`POST /api/auth/verify-magic-link`
-
-Input:
-- `token`
-
-Backend actions:
-- Verifies token (unused, unexpired)
-- Marks token used
-- Creates `UserSession`
-- Returns session token and company context
-
-### Session profile
-`GET /api/auth/me`
-
-Returns:
-- authenticated user info
-- company info
+1. Company registers and sets its domain.
+2. User requests a magic login link.
+3. User verifies link and gets a session token.
+4. User creates simulation prompts.
+5. User starts simulation.
+6. Background worker runs LLM checks and writes results.
+7. Dashboard/metrics endpoints read those results.
+8. PDF endpoint creates an actionable report for engineering or marketing.
 
 ---
 
-## 4) Manual Run Lifecycle
+## 3) Project Structure (Important Files)
 
-### A) Generate prompts
-`POST /api/runs/generate-prompts`
-
-Input:
-- `topic` (example: `Laptop`)
-- `query_count` (example: `50`)
-
-Backend:
-- builds company-aware prompts
-- creates draft run (`QueryBatchRun`) + items (`QueryBatchItem`)
-- returns editable prompt list
-
-### B) Edit prompts
-`PATCH /api/runs/<run_id>/queries`
-
-Input:
-- list of edited queries
-
-Backend:
-- replaces/reorders run items
-- records editor user id
-
-### C) Start run (async)
-`POST /api/runs/<run_id>/start`
-
-Backend:
-- returns immediate success (`queued`)
-- worker executes queries in background
-- updates run status/progress counters
-
-### D) Poll status
-`GET /api/runs/<run_id>/status`
-
-Returns:
-- status
-- completed/failed counts
-- progress percentage
-
-### E) View history
-`GET /api/runs/history`
-`GET /api/runs/history/<run_id>`
-
-Returns:
-- all historical runs for company
-- query-level outcomes
-- before/after snapshots for comparison
+- `run.py`: starts Flask app
+- `config.py`: environment-based config (DB, Celery, keys)
+- `app/__init__.py`: app factory + blueprint registration
+- `app/routes/auth.py`: register, magic link, session endpoints
+- `app/routes/queries.py`: create/get/cancel prompt sets
+- `app/routes/simulations.py`: start simulation + generate PDF
+- `app/routes/dashboard.py`: analytics payload for dashboard
+- `app/routes/metrics.py`: cards and detail metrics endpoints
+- `app/tasks/simulations.py`: Celery task wrapper
+- `app/services/agentic_geo_automation.py`: main simulation pipeline
+- `app/services/pdf_report_generator.py`: PDF generation logic
+- `app/models/simulation.py`: simulation-related DB schema
+- `tests/`: unittest test suite
 
 ---
 
-## 5) Data Models (New/Updated)
+## 4) API Overview
 
-## Company-related
-- `Company` (updated)
-  - added `about_company`
-  - added `approved_email_domain`
-  - added `registration_status`
-- `CompanyConfig` (updated)
-  - manual-run controls (`default_query_count`, `max_query_count`)
+Base URL (local): `http://localhost:5000`
 
-## Auth models
-- `CompanyDomain`
-- `CompanyUser`
-- `MagicLinkToken`
-- `UserSession`
+### Health
+- `GET /api/health`
 
-## Run history models
-- `QueryBatchRun`
-- `QueryBatchItem`
+### Auth (`/api/auth`)
+- `POST /register-company`
+- `POST /request-magic-link`
+- `POST /verify-magic-link`
+- `GET /verify?token=...` (redirect flow)
+- `GET /me`
+- `POST /logout`
 
-## Existing execution models (reused)
-- `QueryTemplate`
-- `QueryRun` (now can link to `batch_run_id` / `batch_item_id`)
-- `AccuracyCheck`
-- `FactualError`
-- `ContentFix`
+### Query Drafts (`/api/agent`)
+- `POST /queries`
+- `GET /queries/<simulation_id>`
+- `POST /queries/cancel`
+
+### Simulations + Reports (`/api/agents`)
+- `POST /simulations`
+- `POST /pdfs`
+
+### Analytics
+- `GET /api/dashboard/analytics`
+- `GET /api/metrics/dashboard`
+- `GET /api/metrics/accuracy`
+- `GET /api/metrics/visibility`
+- `GET /api/metrics/competitors`
+- `GET /api/metrics/actions`
+
+Most endpoints require:
+- `Authorization: Bearer <session_token>`
 
 ---
 
-## 6) Folder Structure (Updated)
+## 5) Environment Variables
 
-```text
-server/
-├── app/
-│   ├── __init__.py
-│   ├── extensions.py
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── company.py
-│   │   ├── auth.py
-│   │   ├── run_history.py
-│   │   ├── query.py
-│   │   ├── accuracy.py
-│   │   ├── crawl.py
-│   │   ├── content.py
-│   │   ├── competitor.py
-│   │   ├── source.py
-│   │   └── ethics.py
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   ├── auth.py
-│   │   ├── runs.py
-│   │   ├── query_tester.py
-│   │   ├── dashboard.py
-│   │   ├── visibility.py
-│   │   ├── accuracy.py
-│   │   ├── competitors.py
-│   │   ├── actions.py
-│   │   ├── crawl.py
-│   │   └── ethics.py
-│   ├── services/
-│   │   ├── auth_service.py
-│   │   ├── run_orchestrator.py
-│   │   ├── query_runner.py
-│   │   ├── fact_checker.py
-│   │   ├── crawler.py
-│   │   ├── content_generator.py
-│   │   ├── root_cause.py
-│   │   └── scoring.py
-│   ├── jobs/
-│   │   └── __init__.py   # legacy namespace only (no scheduled automations)
-│   └── utils/
-│       ├── llm_clients.py
-│       └── schema_validator.py
-├── migrations/
-├── tests/
-├── config.py
-├── run.py
-└── requirements.txt
+Create a `.env` file in the project root.
+
+Required or commonly used:
+
+- `FLASK_ENV=development`
+- `SECRET_KEY=your_secret`
+- `DATABASE_URL=sqlite:///vigil_dev.db`
+- `FRONTEND_BASE_URL=http://localhost:3000`
+- `BACKEND_BASE_URL=http://localhost:5000`
+
+- `CELERY_BROKER_URL=redis://localhost:6379/0`
+- `CELERY_RESULT_BACKEND=redis://localhost:6379/0`
+
+- `OPENAI_API_KEY=...`
+- `ANTHROPIC_API_KEY=...`
+- `PERPLEXITY_API_KEY=...`
+- `GOOGLE_API_KEY=...`
+
+- `POWERAUTOMATE_EMAIL_API_URL=...`
+
+Notes:
+- In development, tables can auto-create on startup.
+- If Celery is not available, simulation route falls back to local thread execution.
+
+---
+
+## 6) Run with Docker (Primary)
+
+This repo is intended to run with Docker.
+
+### Option A: run full system (client + server)
+
+From the repository root (folder that contains `docker-compose.yml`):
+
+```bash
+docker compose up --build
+```
+
+Services:
+- Client: `http://localhost:5173`
+- Server: `http://localhost:5000`
+
+### Option B: run backend container only
+
+From this `server` folder:
+
+```bash
+docker build -t geo-server .
+docker run --rm -p 5000:5000 --env-file ../.env geo-server
+```
+
+### Optional: local non-Docker mode
+
+If you need local Python execution:
+
+```bash
+bash run.sh
+```
+
+Optional worker process:
+
+```bash
+bash run.sh worker
 ```
 
 ---
 
-## 7) Background Processing Strategy (No Scheduler)
+## 7) Run Tests
 
-There is no APScheduler-driven global loop.
-
-Background execution is request-driven:
-- frontend start action creates queued run
-- orchestrator starts worker thread/job for that run
-- worker updates status and history
-
-For production scale, switch executor to Celery/RQ/SQS without changing API contracts.
+```bash
+python -m unittest discover -s tests
+```
 
 ---
 
-## 8) API Contract Summary
+## 8) Judge Notes
 
-### Auth
-- `POST /api/auth/register-company`
-- `POST /api/auth/request-magic-link`
-- `POST /api/auth/verify-magic-link`
-- `GET /api/auth/me`
-- `POST /api/auth/logout`
+If you are evaluating this backend quickly:
 
-### Runs + History
-- `POST /api/runs/generate-prompts`
-- `PATCH /api/runs/<run_id>/queries`
-- `POST /api/runs/<run_id>/start`
-- `GET /api/runs/<run_id>/status`
-- `GET /api/runs/history`
-- `GET /api/runs/history/<run_id>`
+1. Check health route first: `/api/health`
+2. Register company and complete magic-link auth
+3. Create queries with `/api/agent/queries`
+4. Start run with `/api/agents/simulations`
+5. Review metrics at `/api/dashboard/analytics` and `/api/metrics/*`
+6. Generate a PDF with `/api/agents/pdfs`
 
-### Existing Analytics
-- `GET /api/dashboard/...`
-- `GET /api/visibility/...`
-- `GET /api/accuracy/...`
-- `GET /api/competitors/...`
-- `GET /api/actions/...`
-- `GET /api/crawl/...`
-- `GET /api/ethics/...`
-
----
-
-## 9) Notes for Frontend Team
-
-- Login UX can be one field + button:
-  - email input
-  - “Send magic link” button
-- After link verify, use session token in `Authorization: Bearer ...`.
-- Run flow UX should be:
-  1) choose topic + count
-  2) edit prompts
-  3) start
-  4) poll status
-  5) view history detail
-
----
-
-## 10) Next Backend Implementation Steps
-
-1. Implement `auth_service.py` token issuance + email provider integration.
-2. Implement `run_orchestrator.py` threaded worker execution path.
-3. Register new blueprints in app factory.
-4. Add migration for new auth/history tables.
-5. Add integration tests for auth and run lifecycle.
+This gives a full end-to-end validation of the core flow.
